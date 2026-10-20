@@ -1,0 +1,23 @@
+[
+  {"id": "q01", "turns": ["payments-service 결제 응답이 느려지고 CPU가 치솟았어요, 원인 확인해주세요"],
+   "purpose": "KNOWN_SYSTEMS 인식 확인 (cpu-spike runbook)", "expected_route": "incident", "expected_incident_type": ""},
+  {"id": "q02", "turns": ["cache-service 메모리 사용률이 계속 올라가고 있어요"],
+   "purpose": "미인식 시스템 확인 2 (memory-leak runbook)", "expected_route": "incident", "expected_incident_type": ""},
+  {"id": "q03", "turns": ["log-service 디스크 공간이 부족하다는 알림이 왔어요"],
+   "purpose": "미인식 시스템 확인 3 (disk-full runbook)", "expected_route": "incident", "expected_incident_type": ""},
+  {"id": "q04", "turns": ["gateway-service에서 payments-service로 가는 요청이 타임아웃 나고 있어요"],
+   "purpose": "두 시스템 동시 언급 — system_name은 gateway-service, research는 두 시스템 모두", "expected_route": "incident", "expected_incident_type": ""},
+  {"id": "q05", "turns": ["web-01 CPU 급증, auth-service 커넥션 풀도 같이 확인해줘"],
+   "purpose": "기본 2개 시스템 동시 언급 — web-01, auth-service 둘 다 조사", "expected_route": "incident", "expected_incident_type": ""},
+  {"id": "q06", "turns": ["payments-service랑 cache-service 둘 다 저하됐는데 공통 원인이 있는지 분석해줘"],
+   "purpose": "needs_analysis=true 유도 — gate·analysis_node 비교 분석 동작", "expected_route": "incident", "expected_incident_type": ""},
+  {"id": "q07", "turns": ["로그인 응답이 느려요, 원인 확인해주세요"],
+   "purpose": "시스템명 미언급 — auth-service 폴백", "expected_route": "incident", "expected_incident_type": ""},
+  {"id": "q08", "turns": ["billing-service 응답이 느려요"],
+   "purpose": "목록에 없는 시스템명 — auth-service 폴백, target 클램프", "expected_route": "incident", "expected_incident_type": ""},
+  {"id": "q09", "turns": ["안녕, 너는 누구야?"],
+   "purpose": "route=chat 직행", "expected_route": "chat", "expected_incident_type": ""},
+  {"id": "q10", "turns": ["제 이름은 민수입니다", "제 이름이 뭐였죠?"],
+   "purpose": "세션 기억 — 같은 thread_id 2턴, 2턴째 답에 '민수' 포함", "expected_route": "chat", "expected_incident_type": "",
+   "expect_in_last_reply": "민수"}
+]

@@ -1,0 +1,11 @@
+query_id,runs,success_rate,ms_median,ms_p95,route,incident_type,runbook,monitored_systems,retry_total,validation_attempts_median,expected_route,expected_incident_type,llm_backend,fast_llm,quality_llm,started_at
+q01,3,0.67,47554,300021,"[('incident', 2), ('None', 1)]","[('cpu-spike', 2), ('None', 1)]","[('cpu-spike', 2), ('None', 1)]","[('payments-service', 2), ('', 1)]",0,1,incident,,ollama,ollama:qwen3:0.6b,ollama:qwen3:8b,2026-10-20T14:14:43+09:00
+q02,3,1.0,33153,36015,"[('incident', 3)]","[('memory-leak', 3)]","[('memory-leak', 3)]","[('cache-service', 3)]",0,1,incident,,ollama,ollama:qwen3:0.6b,ollama:qwen3:8b,2026-10-20T14:14:43+09:00
+q03,3,1.0,92724,152151,"[('incident', 3)]","[('disk-full', 3)]","[('disk-full', 3)]","[('log-service', 3)]",0,1,incident,,ollama,ollama:qwen3:0.6b,ollama:qwen3:8b,2026-10-20T14:14:43+09:00
+q04,3,1.0,32502,108468,"[('incident', 3)]","[('network-timeout', 3)]","[('network-timeout', 3)]","[('gateway-service', 3)]",0,1,incident,,ollama,ollama:qwen3:0.6b,ollama:qwen3:8b,2026-10-20T14:14:43+09:00
+q05,3,1.0,31863,57766,"[('incident', 3)]","[('db-down', 3)]","[('db-down', 3)]","[('web-01', 3)]",0,1,incident,,ollama,ollama:qwen3:0.6b,ollama:qwen3:8b,2026-10-20T14:14:43+09:00
+q06,3,1.0,62501,67308,"[('incident', 3)]","[('cpu-spike', 3)]","[('cpu-spike', 3)]","[('payments-service', 3)]",0,1,incident,,ollama,ollama:qwen3:0.6b,ollama:qwen3:8b,2026-10-20T14:14:43+09:00
+q07,3,1.0,31918,33252,"[('incident', 3)]","[('high-latency', 3)]","[('high-latency', 3)]","[('auth-service', 3)]",0,1,incident,,ollama,ollama:qwen3:0.6b,ollama:qwen3:8b,2026-10-20T14:14:43+09:00
+q08,3,1.0,54174,54484,"[('incident', 3)]","[('high-latency', 3)]","[('high-latency', 3)]","[('auth-service', 3)]",0,1,incident,,ollama,ollama:qwen3:0.6b,ollama:qwen3:8b,2026-10-20T14:14:43+09:00
+q09,3,1.0,1276,1513,"[('chat', 3)]","[('None', 3)]","[('None', 3)]","[('', 3)]",0,0,chat,,ollama,ollama:qwen3:0.6b,ollama:qwen3:8b,2026-10-20T14:14:43+09:00
+q10,3,1.0,2481,2696,"[('chat', 3)]","[('None', 3)]","[('None', 3)]","[('', 3)]",0,0,chat,,ollama,ollama:qwen3:0.6b,ollama:qwen3:8b,2026-10-20T14:14:43+09:00
