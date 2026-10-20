@@ -169,25 +169,28 @@ LANGCHAIN_TRACING_V2=false LLM_BACKEND=fake SUPERVISOR_VERSION=v2 ./.venv/bin/py
 
 | 파일 | 위치 | GitHub |
 |---|---|---|
-| 작업 로그 (이 파일) | `doc/workLog.md` | 대상 (미커밋) |
-| 읽기 가이드 | `doc/guide.md` | 대상 (수정분 미커밋) |
+| 작업 로그 (이 파일) | `doc/workLog.md` | 올라감 |
+| 읽기 가이드 | `doc/guide.md` | 올라감 |
 | 교안 기준표 | `doc/lessonstandard_k.md` | **제외** (교안 정리본이라 로컬 전용) |
-| 미션 | `doc/mission_k.md` | 대상 (미커밋) |
-| 발표 원고 | `doc/presentation_k.md` | 대상 (미커밋) |
-| Before 리포트 | `bench/results/before.md` | 대상 (미커밋) |
-| 측정 스크립트 / 질의셋 | `bench/run_baseline.py`, `bench/queries.json` | 대상 (미커밋) |
-| 개선안 산출물 폴더 | `outputs/` | 대상 (미커밋) |
-| 단위 테스트 | `tests/`, `requirements-dev.txt` | 대상 (미커밋) |
+| 미션 | `doc/mission_k.md` | 올라감 |
+| 발표 원고 | `doc/presentation_k.md` | 올라감 |
+| Before 리포트 | `bench/results/before.md` | 올라감 |
+| 측정 스크립트 / 질의셋 | `bench/run_baseline.py`, `bench/queries.json` | 올라감 |
+| 개선안 산출물 폴더 | `outputs/` | 올라감 |
+| 단위 테스트 | `tests/`, `requirements-dev.txt` | 올라감 |
 | 스킬(`/improve`, `/bench`) · 리뷰어 · hook 3개 · 설정 | `.claude/` | **제외** (로컬 전용) |
 | 작업 규칙 | `CLAUDE.md` | **제외** (로컬 전용) |
 | Claude 구성 설명서 | `doc/workClaude.md` | **제외** (로컬 전용) |
 
 ### git 상태 메모
 
-- GitHub에 올라간 것: 첫 커밋 `ae09c45` 하나뿐이다.
-- `baseline` 태그는 로컬에만 있다. 올리려면 `git push origin baseline`
-- 아직 커밋하지 않은 것: 위 표에서 "미커밋"인 항목 전부
-- 커밋할 때는 경로를 지정해서 add한다(`git add .` 대신). Claude 표기는 넣지 않는다.
+- GitHub(`main`)에 올라간 커밋은 3개다(2026-10-20). 작성자는 전부 박기택이고 Claude 표기는 없다.
+  - `ae09c45` Initial commit
+  - `2d54843` test: bench(Before 측정) + 단위 테스트
+  - `f8d3de3` docs: workLog, 미션, 발표 원고
+- `baseline` 태그도 push했다. GitHub에서 개선 전 코드 시점으로 바로 이동할 수 있다.
+- 올리지 않은 것(로컬 전용): `.claude/`, `CLAUDE.md`, `doc/workClaude.md`, `doc/lessonstandard_k.md`(교안 정리본). 모두 `.git/info/exclude`에 들어 있다.
+- 커밋할 때는 경로를 지정해서 add한다(`git add .` 대신). git_guard hook이 Claude 표기와 로컬 전용 파일 add를 막는다.
 
 ---
 
