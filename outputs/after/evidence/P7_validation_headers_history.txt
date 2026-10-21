@@ -1,0 +1,14 @@
+# P7 After — fake 백엔드 서버(:8199)에서 입력 검증·SSE 헤더·이력 저장 확인 (2026-10-21 21:17)
+# Before S7: 빈 메시지도 /chat, /chat/stream 모두 200 OK
+== 빈 메시지 /chat ==
+{"detail":[{"type":"string_too_short","loc":["body","message"],"msg":"String should have at least 1 character","input":"","ctx":{"min_length":1}}]} → HTTP 422
+== 공백 메시지 /chat/stream ==
+{"detail":[{"type":"value_error","loc":["message"],"msg":"Value error, message must not be blank","input":"   "}]} → HTTP 422
+== 정상 스트림 헤더 ==
+HTTP/1.1 200 OK
+cache-control: no-cache
+x-accel-buffering: no
+content-type: text/event-stream; charset=utf-8
+== 이력 (같은 thread에 user·assistant 저장) ==
+user|web-01 장애 진단
+assistant|'web-01 장애 진단' 진단 결과: 1) 모니터링: web-01 상태

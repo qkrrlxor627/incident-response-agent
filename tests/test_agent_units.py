@@ -299,3 +299,51 @@ def test_stream_sends_error_event_then_done():
     body = TestClient(server.app).get("/chat/stream", params={"message": "web-01 장애"}).text
     assert '"type": "Error"' in body and '"code": "LLM_UNAVAILABLE"' in body
     assert body.rstrip().endswith("data: [DONE]")
+
+
+# ── P7: 입력 검증·헤더·이력 ───────────────────────────────────────────────
+class _MemStore:
+    def __init__(self):
+        self.rows = []
+
+    def load(self, thread_id):
+        return [r for r in self.rows if r[0] == thread_id]
+
+    def append(self, thread_id, role, content):
+        self.rows.append((thread_id, role, content))
+
+
+def _client_with(graph, store=None):
+    from types import SimpleNamespace
+
+    from fastapi.testclient import TestClient
+
+    import server
+    server.app.state.deps = SimpleNamespace(version="v2", session_store=store or _MemStore())
+    server.app.state.graph = graph
+    return TestClient(server.app)
+
+
+@pytest.mark.parametrize("message", ["", "   ", "x" * 2001])
+def test_chat_rejects_invalid_message(message):
+    # [P7 AFTER] Before: 빈 메시지도 200 OK (S7)
+    c = _client_with(graph=None)
+    assert c.post("/chat", json={"message": message}).status_code == 422
+    assert c.get("/chat/stream", params={"message": message}).status_code == 422
+
+
+def test_chat_rejects_bad_thread_id():
+    assert _client_with(graph=None).post("/chat", json={"message": "hi", "thread_id": "a b;drop"}).status_code == 422
+
+
+def test_stream_has_sse_headers_and_keeps_question_when_it_fails():
+    import httpx as _httpx
+
+    class BrokenGraph:
+        async def astream(self, *a, **k):
+            raise _httpx.ConnectError("down")
+            yield  # pragma: no cover
+    store = _MemStore()
+    r = _client_with(BrokenGraph(), store).get("/chat/stream", params={"message": "web-01 장애", "thread_id": "t1"})
+    assert r.headers["cache-control"] == "no-cache" and r.headers["x-accel-buffering"] == "no"
+    assert store.rows == [("t1", "user", "web-01 장애")]   # Before: 실패한 턴은 질문까지 사라졌다
