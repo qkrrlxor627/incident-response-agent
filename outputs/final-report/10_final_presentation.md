@@ -54,7 +54,7 @@
 | **DI** (의존성 주입) | `SupervisorDeps` + `functools.partial`, `create_session_store()` 팩토리 | 노드에 시간 측정 래퍼를 덧씌움, 저장소 팩토리 주입 | `after/captures/code/C13` |
 | **LangSmith** | 노드·LLM·MCP `@traceable`, `evaluate()` 실험 | 스트림 요청도 루트 run, judge도 trace | `after/captures/terminal/S13_langsmith_evaluate_after.png` |
 | **모듈화** | `agent/systems.py`(시스템 추출), `agent/errors.py`(에러 분류) | 3개 파일의 중복 제거(#14) | `after/captures/code/C02` |
-| **단위 테스트** | `tests/test_agent_units.py` | 15 passed + 1 xfail → **57 passed** (LLM·MCP·서버 없이 0.7초) | `./.venv/bin/python3 -m pytest tests -q` |
+| **단위 테스트** | `tests/test_agent_units.py` | 15 passed + 1 xfail → **70 passed** (LLM·MCP·서버 없이 0.7초) | `./.venv/bin/python3 -m pytest tests -q` |
 
 - 최종 실행 화면: `outputs/after/captures/S1_q05_multi_system_db_down.png`
 
@@ -75,6 +75,17 @@
 > 대본: "검색 정확도는 74%에서 100%로, 장애 질문 응답시간은 36초에서 13초로 줄었습니다. 비용도 17% 줄었습니다. 같은 10개 질문을 3번씩, Before와 같은 모델로 측정했습니다."
 
 ## 5. 한계 및 트레이드오프 (0:30)
+
+> 전체 표는 [`12_tradeoffs_summary.md`](12_tradeoffs_summary.md)에 있다. 발표에서는 아래 한 줄과 표를 쓴다.
+> **"정확도는 두 환경 모두 올랐지만, 속도와 비용은 로컬 모델에서만 좋아졌습니다. OpenAI에서는 gpt-4o 검증 호출 때문에 1.2초 느려지고 비용이 2배가 됐습니다."**
+
+| 환경 | 정답률 | 응답 중앙값 | 가상 비용 |
+|---|---|---|---|
+| Ollama (qwen3 0.6b/8b) | 0.739 → 1.0 | 36.0 → 12.8초 | $0.164 → $0.136 |
+| OpenAI (gpt-4o-mini/4o) | 0.75 → 1.0 | 5.3 → 6.5초 ⚠️ | $0.074 → $0.147 ⚠️ |
+
+- 측정 이후 실사용 테스트에서 새 문제 N1~N9를 찾아 7개를 고쳤다(`11_new_issues_N1_N8.md`, `outputs/openai/README.md`).
+  → 정답 세트 10문항에 과적합됐다는 근거이자, 다음 과제(정답 세트 확장)다.
 
 | 항목 | 내용 |
 |---|---|

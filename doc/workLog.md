@@ -1,5 +1,22 @@
 # 작업 로그 — all_total_vue (운영 인시던트 대응 에이전트)
 
+## 📌 전체 요약 (2026-10-20 ~ 10-21) — 처음 보는 사람은 여기부터
+
+| 단계 | 한 일 | 결과 / 문서 |
+|---|---|---|
+| 1. Before 측정 | 질문 10개 × 3회. 응답 성공률 0.97 | `bench/results/before.md` |
+| 2. 측정 방법 변경 | 정답 세트(`eval_set.json`) 재채점 + LangSmith judge | **0.97 → 0.739**: 문제가 드러남 (`outputs/before/`) |
+| 3. 문제 정의 | P1~P11, E15. 증거 캡처 S1~S13, C01~C13 | `outputs/final-report/01_problem_recognition.md` |
+| 4. 단계별 수정 1~7 | 단계마다 커밋 1개 + 문서 1개(7단계 문제 해결 형식) | `outputs/final-report/03~09` |
+| 5. After 측정 (Ollama) | 회귀(q10) 발견 → 보정 → 재측정 | 정답률 1.0, 36 → 12.8초 (`outputs/after/README.md`, `09b`) |
+| 6. 실사용·탐색 스윕 | 새 문제 N1~N8 (6개 수정, 2개 한계) | `outputs/final-report/11_new_issues_N1_N8.md` |
+| 7. OpenAI Before/After | 정답률 0.75 → 1.0, 대신 +1.2초·비용 2배. N9 발견·수정 | `outputs/openai/README.md` |
+| 8. 정리 | 트레이드오프 총정리, 최종 발표, README | `12_tradeoffs_summary.md`, `10_final_presentation.md`, `README.md` |
+
+- 테스트: 15 passed + 1 xfail → **70 passed**
+- 결과 파일이 여러 회차라, 무엇이 최신인지는 README의 "측정 이력" 표를 본다.
+- 코드에서 `[P1 BEFORE]` / `[P1 AFTER]`(N도 같은 형식)로 검색하면 바뀐 곳이 모두 나온다. 위치 목록: `outputs/final-report/00_code_index.md`
+
 ## 2026-10-20
 
 ### 1. 프로젝트 파악
@@ -510,6 +527,8 @@ claude --continue                  # 마지막 대화를 그대로 이어서 연
 
 ## 다음에 할 작업
 
-- [x] 문제 1~11 개선 + After 측정 (2026-10-21 저녁, 위 표)
-- [ ] 발표 리허설: `outputs/final-report/01_problem_recognition.md` → `10_final_presentation.md` 순서로 5분
-- [ ] (선택) 한계 항목: 시스템 별칭 사전, LangGraph checkpointer, 새 질문 유형으로 과적합 확인
+- [x] 문제 1~11 개선 + After 측정 (2026-10-21 저녁)
+- [x] 새로 발견된 문제 N1~N6, N9 수정 + OpenAI Before/After (2026-10-21 밤)
+- [ ] 발표 리허설: `01_problem_recognition.md` → `10_final_presentation.md` 순서로 5분 (트레이드오프는 `12_tradeoffs_summary.md`)
+- [ ] 정답 세트 확장: 대화 섞기, 시스템 이름 변형, 상태 질문 (N1~N6 시나리오를 `eval_set.json`에)
+- [ ] (선택) N8 후속 질문 문맥, `JUDGE_LLM=fast_llm`으로 OpenAI 비용 측정

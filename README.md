@@ -175,7 +175,8 @@ cd bench && ../.venv/bin/python3 eval_langsmith.py --prefix after    # LangSmith
 | `bench/` | 측정 스크립트, 정답 세트, 결과(`results/baseline_*`, `after_*`) |
 | `outputs/before/` | Before 증거: 화면, 터미널, 코드 캡처, 원본 텍스트 |
 | `outputs/after/` | After 증거(같은 파일명) + **Before/After 비교표** |
-| `outputs/final-report/` | 문제 인식(01), 측정 추적(02), 단계별 기록(03~09b), **최종 발표(10)**, 새로 발견된 문제(11) |
+| `outputs/final-report/` | 문제 인식(01), 측정 추적(02), 단계별 기록(03~09b), **최종 발표(10)**, 새로 발견된 문제(11), **트레이드오프 총정리(12)** |
+| `outputs/openai/` | OpenAI(과금) 환경 Before/After + 캡처 |
 | `doc/workLog.md` | 날짜별 작업 기록 |
 | `doc/guide.md` | Before/After 측정과 캡처를 직접 재현하는 명령 |
 | `doc/README.md` | 원래 실습 프로젝트 설명 (Wave 1~15) |
@@ -185,6 +186,8 @@ git 태그:
 - `before-evidence`: Before 측정을 고정한 시점
 
 ## 한계
+
+> 개선별로 얻은 것과 내준 것: [`12_tradeoffs_summary.md`](outputs/final-report/12_tradeoffs_summary.md)
 
 - 평가 표본이 질문 10개 × 3회라 작다. 정답 세트에 맞춘 개선이라 **과적합 위험**이 있다.
 - 시스템 추출, 장애 키워드, route 보정이 모두 키워드 규칙이다. 이름 없는 표현("결제 서버가 안 돼요")은 놓친다.
