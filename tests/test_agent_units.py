@@ -10,7 +10,8 @@ import pytest
 
 from agent.graph import (_classify_incident_type, _extract_system_name,
                          gate_node, validate_node)
-from agent.ollama_llm import OllamaFastLLM, _guess_targets
+from agent.ollama_llm import OllamaFastLLM
+from agent.systems import mentioned_systems
 
 
 def mon(*alerts, status="degraded"):
@@ -19,8 +20,9 @@ def mon(*alerts, status="degraded"):
 
 
 # ── 시스템명 추출 ────────────────────────────────────────────────────────
-def test_extract_system_name_picks_first_mentioned():
-    assert _extract_system_name("gateway-service에서 payments-service로 타임아웃") == "gateway-service"
+def test_extract_system_name_passes_every_mentioned_system():
+    # [P1 AFTER] Before는 첫 시스템 1개("gateway-service")만 MCP Prompt에 넘겼다
+    assert _extract_system_name("gateway-service에서 payments-service로 타임아웃") == "gateway-service, payments-service"
 
 
 def test_extract_system_name_falls_back_to_auth_service():
@@ -28,9 +30,10 @@ def test_extract_system_name_falls_back_to_auth_service():
     assert _extract_system_name("billing-service 응답이 느려요") == "auth-service"
 
 
-def test_guess_targets_returns_every_mentioned_system():
-    assert _guess_targets("web-01 CPU 급증, auth-service 커넥션 풀") == ["auth-service", "web-01"]
-    assert _guess_targets("시스템 이름 없음") == ["auth-service"]
+def test_mentioned_systems_keeps_mention_order():
+    # [#14 AFTER] Before의 _guess_targets는 알파벳 정렬(['auth-service', 'web-01'])이라 '먼저 말한 시스템'을 잃었다
+    assert mentioned_systems("web-01 CPU 급증, auth-service 커넥션 풀") == ["web-01", "auth-service"]
+    assert mentioned_systems("시스템 이름 없음") == []
 
 
 # ── incident_type 분류 규칙 (graph._INCIDENT_TYPE_RULES) ─────────────────
@@ -90,8 +93,7 @@ def test_validate_forces_pass_on_third_attempt():
 
 
 # ── P1 버그 고정: 여러 시스템을 말해도 1개만 조사 (before.md 3-1) ─────────
-# strict=True: 고치면 XPASS가 실패로 보고된다 → 그때 이 마커를 지우면 정식 회귀 테스트가 된다
-@pytest.mark.xfail(strict=True, reason="P1 미수정 — before.md 3-1")
+# [P1 AFTER] 고쳐서 XPASS가 났으므로 xfail 마커를 지웠다 → 이제 정식 회귀 테스트다
 def test_plan_researches_every_mentioned_system(monkeypatch):
     """모델이 research task를 1개만 내도, 쿼리에 나온 시스템은 모두 조사돼야 한다."""
     llm = OllamaFastLLM("test-model", 0.0)
@@ -101,3 +103,25 @@ def test_plan_researches_every_mentioned_system(monkeypatch):
     result, _ = llm.plan("web-01 CPU 급증, auth-service 커넥션 풀도 같이 확인해줘", "절차")
     targets = sorted(t["target"] for t in result["tasks"] if t["agent"] == "research")
     assert targets == ["auth-service", "web-01"]
+
+
+@pytest.mark.parametrize("model_tasks", [
+    [],                                                  # B: research 0개 (Before에도 복구됨)
+    [{"agent": "research", "target": "web-01"}],         # A: 1개만 냄 (Before 누락)
+    [{"agent": "research", "target": "auth_service"}],   # C: 오타 (Before는 web-01로 바뀌어 누락)
+    [{"agent": "research", "target": "auth-service"}, {"agent": "research", "target": "web-01"}],  # D
+])
+def test_plan_recovers_every_system_in_mention_order(monkeypatch, model_tasks):
+    """P1 원인 분석의 stub 실험 A~D를 그대로 고정한다. 4경우 모두 언급 순서대로 2개."""
+    llm = OllamaFastLLM("test-model", 0.0)
+    out = json.dumps({"needs_analysis": False, "tasks": model_tasks})
+    monkeypatch.setattr(llm, "_chat", lambda *a, **k: (out, {"usd": 0.0}))
+    result, _ = llm.plan("web-01 CPU 급증, auth-service 커넥션 풀도 같이 확인해줘", "절차")
+    assert [t["target"] for t in result["tasks"] if t["agent"] == "research"] == ["web-01", "auth-service"]
+
+
+def test_plan_keeps_default_system_when_nothing_mentioned(monkeypatch):
+    llm = OllamaFastLLM("test-model", 0.0)
+    monkeypatch.setattr(llm, "_chat", lambda *a, **k: ('{"needs_analysis": false, "tasks": []}', {"usd": 0.0}))
+    result, _ = llm.plan("로그인 응답이 느려요", "절차")
+    assert [t["target"] for t in result["tasks"]] == ["auth-service"]

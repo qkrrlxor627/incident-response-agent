@@ -23,28 +23,35 @@ from .deps import SupervisorDeps
 from .retry import with_retry
 
 
-def _load_known_systems() -> set[str]:
-    """ollama_llm.py/openai_llm.py와 동일한 소스(data/monitoring.json)에서
-    시스템 목록을 읽는다 — plan_node가 MCP Prompt에 넘길 system_name을
-    쿼리에서 멤버십 매칭으로 뽑아낼 때 쓴다."""
-    path = Path(__file__).resolve().parent.parent / "data" / "monitoring.json"
-    try:
-        return set(json.loads(path.read_text()).keys())
-    except (OSError, json.JSONDecodeError):
-        return {"auth-service", "web-01"}
-
-
-KNOWN_SYSTEMS = _load_known_systems()
+# ── [#14 BEFORE] ollama_llm.py·openai_llm.py와 똑같은 복사본 ──
+# def _load_known_systems() -> set[str]:
+#     path = Path(__file__).resolve().parent.parent / "data" / "monitoring.json"
+#     try:
+#         return set(json.loads(path.read_text()).keys())
+#     except (OSError, json.JSONDecodeError):
+#         return {"auth-service", "web-01"}
+#
+#
+# KNOWN_SYSTEMS = _load_known_systems()
+#
+#
+# ── [P1 BEFORE] 여러 시스템이 나와도 '첫 번째 1개'만 MCP Prompt에 넘김 ──
+#    → plan 입력의 표준 절차에 "- 시스템: web-01" 한 줄만 들어가 모델이 1개만 계획했다 (S3 증거)
+# def _extract_system_name(query: str) -> str:
+#     matches = [(query.index(s), s) for s in KNOWN_SYSTEMS if s in query]
+#     return min(matches)[1] if matches else "auth-service"
+# ── [P1·#14 AFTER] 공통 모듈에서 가져온다 (agent/systems.py) ──
+from .systems import DEFAULT_SYSTEM, KNOWN_SYSTEMS, mentioned_systems  # noqa: E402,F401
 
 
 def _extract_system_name(query: str) -> str:
-    """정규식 대신 실제 KNOWN_SYSTEMS 멤버십 매칭 — MCP Prompt(incident_analysis_
-    prompt)의 system_name은 "시스템: X" 한 줄짜리 컨텍스트라 항상 정해진 이름
-    중 하나로만 고정한다(여러 개 언급돼도 join하지 않음 — 실제 조사 대상 목록은
-    이후 plan()의 tasks가 별도로 결정). 쿼리에서 가장 먼저 등장하는 시스템을
-    고르고, 하나도 안 걸리면 가장 흔한 사례인 auth-service로 폴백."""
-    matches = [(query.index(s), s) for s in KNOWN_SYSTEMS if s in query]
-    return min(matches)[1] if matches else "auth-service"
+    """[P1 AFTER] MCP Prompt의 system_name에 질문에 나온 시스템 '전부'를 쉼표로 넘긴다.
+
+    예: "web-01 CPU 급증, auth-service 커넥션 풀" → "web-01, auth-service"
+    MCP 서버(mcp_server.py)의 Prompt 시그니처(system_name: str)는 그대로 두고 값만 바꿨다.
+    → 다른 MCP 클라이언트와의 호환성을 깨지 않는다 (트레이드오프: 타입이 list가 아니라 문자열).
+    """
+    return ", ".join(mentioned_systems(query)) or DEFAULT_SYSTEM
 
 
 class AgentState(TypedDict, total=False):

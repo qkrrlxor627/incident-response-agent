@@ -1,0 +1,8 @@
+# P1 After — 실모델(qwen3:0.6b) plan 원래 출력과 정규화 후 결과 (2026-10-21 21:04)
+# 명령: outputs/final-report/03_step1_P1.md '수동 확인 3'
+  모델 원래 출력: {   "needs_analysis": true,   "tasks": [     {       "agent": "analysis",       "target": "runbook(runbook://incident-response/...)"     },     {       "agent": "research",       "target": "get_monitoring_status Tool for web-01"     },     {       "agent": "research",       "target": "runbook(runboo
+web-01 CPU 급증, auth-service 커넥 → 최종 research: ['web-01', 'auth-service'] 3.6s
+  모델 원래 출력: {   "needs_analysis": true,   "tasks": [     {       "agent": "analysis",       "target": "runbook(runbook://incident-response/...) for payments-service"     },     {       "agent": "research",       "target": "gateway-service monitoring status"     },     {       "agent": "research",       "target"
+gateway-service에서 payments-ser → 최종 research: ['gateway-service', 'payments-service'] 1.9s
+  모델 원래 출력: {   "needs_analysis": true,   "tasks": [     {       "agent": "research",       "target": "get_monitoring_status"     },     {       "agent": "analysis",       "target": "runbook"     },     {       "agent": "research",       "target": "monitoring_status"     },     {       "agent": "analysis",     
+payments-service랑 cache-servic → 최종 research: ['payments-service', 'cache-service'] 2.1s

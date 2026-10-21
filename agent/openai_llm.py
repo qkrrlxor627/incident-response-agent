@@ -29,37 +29,41 @@ from langsmith import traceable
 OPENAI_URL = "https://api.openai.com/v1/chat/completions"
 
 
-def _load_known_systems() -> set[str]:
-    """KNOWN_SYSTEMS를 data/monitoring.json의 실제 시스템 키들로 동적으로 맞춘다 —
-    하드코딩된 2개짜리 목록이 모니터링 데이터와 어긋나던 문제(payments/cache/gateway/
-    log-service 미인식) 수정."""
-    path = Path(__file__).resolve().parent.parent / "data" / "monitoring.json"
-    try:
-        return set(json.loads(path.read_text()).keys())
-    except (OSError, json.JSONDecodeError):
-        return {"auth-service", "web-01"}
-
-
-KNOWN_SYSTEMS = _load_known_systems()
-
-
-def _guess_target(query: str) -> str:
-    """plan()의 코드 레벨 정규화에서 쓰는 안전망 — 모델이 target을 아예 안 내놓거나
-    오타를 내놓으면, 하드코딩된 "auth-service"로 덮어쓰는 대신 KNOWN_SYSTEMS 멤버십
-    매칭으로 쿼리에서 실제 시스템명을 다시 찾는다(W6 정신: 모델 출력을 그대로 믿지
-    않고 코드가 보정). 아무것도 안 걸리면 auth-service로 폴백."""
-    matches = [(query.index(s), s) for s in KNOWN_SYSTEMS if s in query]
-    return min(matches)[1] if matches else "auth-service"
-
-
-def _guess_targets(query: str) -> list[str]:
-    """research task가 통째로 0개일 때(모델이 agent=analysis만 던지는 등 계획 자체가
-    붕괴됐을 때) 쓰는 복구용 — _guess_target처럼 하나만 고르면 쿼리에 언급된 다른
-    시스템이 조사에서 통째로 빠지고, write 단계가 그 빈 자리를 수치까지 지어내서
-    채우는 할루시네이션으로 이어진다(실측 사례: cache-service 미조사 → "CPU 53.5%"
-    조작). 쿼리에 등장하는 KNOWN_SYSTEMS 전부를 복구한다."""
-    matched = sorted(s for s in KNOWN_SYSTEMS if s in query)
-    return matched or ["auth-service"]
+# ── [#14 BEFORE] graph.py·ollama_llm.py·openai_llm.py에 똑같이 복사돼 있던 시스템 추출 로직 ──
+# def _load_known_systems() -> set[str]:
+#     """KNOWN_SYSTEMS를 data/monitoring.json의 실제 시스템 키들로 동적으로 맞춘다 —
+#     하드코딩된 2개짜리 목록이 모니터링 데이터와 어긋나던 문제(payments/cache/gateway/
+#     log-service 미인식) 수정."""
+#     path = Path(__file__).resolve().parent.parent / "data" / "monitoring.json"
+#     try:
+        # return set(json.loads(path.read_text()).keys())
+#     except (OSError, json.JSONDecodeError):
+        # return {"auth-service", "web-01"}
+#
+#
+# KNOWN_SYSTEMS = _load_known_systems()
+#
+#
+# def _guess_target(query: str) -> str:
+#     """plan()의 코드 레벨 정규화에서 쓰는 안전망 — 모델이 target을 아예 안 내놓거나
+#     오타를 내놓으면, 하드코딩된 "auth-service"로 덮어쓰는 대신 KNOWN_SYSTEMS 멤버십
+#     매칭으로 쿼리에서 실제 시스템명을 다시 찾는다(W6 정신: 모델 출력을 그대로 믿지
+#     않고 코드가 보정). 아무것도 안 걸리면 auth-service로 폴백."""
+#     matches = [(query.index(s), s) for s in KNOWN_SYSTEMS if s in query]
+#     return min(matches)[1] if matches else "auth-service"
+#
+#
+# def _guess_targets(query: str) -> list[str]:
+#     """research task가 통째로 0개일 때(모델이 agent=analysis만 던지는 등 계획 자체가
+#     붕괴됐을 때) 쓰는 복구용 — _guess_target처럼 하나만 고르면 쿼리에 언급된 다른
+#     시스템이 조사에서 통째로 빠지고, write 단계가 그 빈 자리를 수치까지 지어내서
+#     채우는 할루시네이션으로 이어진다(실측 사례: cache-service 미조사 → "CPU 53.5%"
+#     조작). 쿼리에 등장하는 KNOWN_SYSTEMS 전부를 복구한다."""
+#     matched = sorted(s for s in KNOWN_SYSTEMS if s in query)
+#     return matched or ["auth-service"]
+# ── [#14 AFTER] 공통 모듈 agent/systems.py 하나로 모았다 (K14 모듈화) ──
+# mentioned_systems: 질문에 나온 시스템을 '언급 순서'대로 돌려준다 (Before는 sorted로 순서를 잃었다)
+from .systems import DEFAULT_SYSTEM, KNOWN_SYSTEMS, mentioned_systems  # noqa: E402
 
 
 ROUTE_INSTRUCTIONS = (
@@ -153,7 +157,13 @@ class OpenAIFastLLM(OpenAILLM):
             agent = t.get("agent")
             if agent == "research":
                 target = t.get("target", "")
-                target = target if target in KNOWN_SYSTEMS else _guess_target(query)
+                # ── [P1 BEFORE] 목록에 없는 target을 '질문의 첫 시스템'으로 바꿔 버림 → 같은 시스템이 중복돼 제거되고 나머지는 사라짐 ──
+                #    실모델(qwen3:0.6b)은 target에 "get_monitoring_status Tool for web-01" 같은 문장을 넣는다
+                #    (확인: outputs/after/evidence/P1_real_model_plan.txt) → 이것이 P1의 실제 원인이었다
+                # target = target if target in KNOWN_SYSTEMS else _guess_target(query)
+                # ── [P1 AFTER] 모르는 이름은 버린다. 질문에 나온 시스템은 아래 '누락 보충'이 다시 채운다 ──
+                if target not in KNOWN_SYSTEMS:
+                    continue
                 if target in seen:
                     continue
                 seen.add(target)
@@ -165,14 +175,26 @@ class OpenAIFastLLM(OpenAILLM):
                 analysis_added = True
                 tasks.append({"id": "task-analysis", "agent": "analysis",
                               "kind": "pattern-analysis", "status": "pending"})
-        if not seen:   # research가 하나도 없으면 실행 불능 — 쿼리에 등장하는
-            # KNOWN_SYSTEMS 전부를 복구(하나만 복구하면 나머지가 조사 누락된 채
-            # write 단계에서 수치가 조작될 수 있음)
-            recovered = [{"id": f"task-{i}", "agent": "research",
-                          "kind": "monitoring", "target": target,
-                          "status": "pending"}
-                         for i, target in enumerate(_guess_targets(query))]
-            tasks = recovered + tasks
+        # ── [P1 BEFORE] research가 '0개'일 때만 보충 → 모델이 1개만 내면 나머지 시스템은 조사 누락 ──
+        #    (q04·q05·q06 9/9건이 시스템 1개만 조사, recall 0.5)
+        # if not seen:   # research가 하나도 없으면 실행 불능 — 쿼리에 등장하는
+        #     # KNOWN_SYSTEMS 전부를 복구(하나만 복구하면 나머지가 조사 누락된 채
+        #     # write 단계에서 수치가 조작될 수 있음)
+        #     recovered = [{"id": f"task-{i}", "agent": "research",
+        #                   "kind": "monitoring", "target": target,
+        #                   "status": "pending"}
+        #                  for i, target in enumerate(_guess_targets(query))]
+        #     tasks = recovered + tasks
+        # ── [P1 AFTER] 모델이 몇 개를 내든, 질문에 나온 시스템 중 빠진 것을 '항상' 보충한다 ──
+        #    모델 출력은 참고만 하고, 조사 범위는 코드가 최종 결정한다 (K6 권위 정규화, K7 gate와 같은 원칙)
+        model_targets = [t["target"] for t in tasks if t["agent"] == "research"]
+        wanted = mentioned_systems(query)   # 질문에 나온 시스템 (언급 순서)
+        # 순서: 질문에 나온 순서 먼저, 그다음 모델이 추가로 고른 시스템 → P2가 '먼저 말한 시스템'을 주 시스템으로 쓴다
+        ordered = list(dict.fromkeys(wanted + model_targets)) or [DEFAULT_SYSTEM]   # 아무것도 없으면 기본 시스템 (Before와 같음)
+        research = [{"id": f"task-{k}", "agent": "research", "kind": "monitoring",
+                     "target": target, "status": "pending"}
+                    for k, target in enumerate(ordered)]
+        tasks = research + [t for t in tasks if t["agent"] != "research"]   # analysis task는 뒤에 그대로
         result = {"needs_analysis": bool(raw.get("needs_analysis", False)),
                   "tasks": tasks}
         return result, usage
