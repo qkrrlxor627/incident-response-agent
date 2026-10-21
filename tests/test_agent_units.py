@@ -9,7 +9,7 @@ import json
 import pytest
 
 from agent.graph import (_classify_incident_type, _extract_system_name,
-                         gate_node, validate_node)
+                         gate_node, replan_check_node, validate_node)
 from agent.ollama_llm import OllamaFastLLM
 from agent.systems import mentioned_systems
 
@@ -48,15 +48,38 @@ def test_classify_by_alert_keyword(alerts, expected):
     assert _classify_incident_type([mon(*alerts)]) == expected
 
 
-def test_classify_falls_back_to_db_down_when_nothing_matches():
-    # before.md 3-2: 정상(web-01)만 조사하면 규칙에 안 걸려 db-down으로 빠진다
-    assert _classify_incident_type([mon(status="healthy")]) == "db-down"
+def test_classify_returns_none_when_every_system_is_healthy():
+    # [P2 AFTER] Before는 정상(web-01)만 조사하면 규칙에 안 걸려 db-down으로 빠졌다
+    assert _classify_incident_type([mon(status="healthy")]) is None
+    assert _classify_incident_type([mon("System 'billing-service' not found", status="unknown")]) is None
 
 
-def test_classify_rule_order_wins_when_alerts_are_combined():
-    # before.md 3-2 참고: 여러 시스템 alerts가 합쳐지면 규칙 목록 앞쪽(latency)이 이긴다
+def test_classify_uses_first_abnormal_system_in_mention_order():
+    # [P2 AFTER] Before는 alerts를 합친 뒤 규칙 목록 앞쪽(latency)이 이겼다 → 이제는 먼저 나온 이상 시스템 기준
     collected = [mon("CPU 91% (threshold 80%)"), mon("p95 latency 2.4s")]
+    assert _classify_incident_type(collected) == "cpu-spike"
+
+
+def test_classify_q05_skips_healthy_primary_system():
+    # q05: web-01(정상, 알림 없음) → auth-service(latency, connection pool) → high-latency (Before: db-down 3/3)
+    collected = [mon(status="healthy"), mon("p95 latency 2.4s (threshold 1.0s)", "connection pool 92% used")]
     assert _classify_incident_type(collected) == "high-latency"
+
+
+def test_replan_check_adds_no_runbook_when_nothing_is_wrong():
+    state = {"query": "billing-service 응답이 느려요", "events": [], "replan_rounds": 0, "collected": []}
+    out = asyncio.run(replan_check_node(state, None))
+    assert out["events"][-1]["is_sufficient"] is True and "tasks" not in out
+    assert "billing-service" in out["collected"][-1]["data"]
+
+
+def test_plan_skips_unmonitored_system(monkeypatch):
+    # q08: 모델이 auth-service를 골라도 감시 대상이 아닌 billing-service만 나온 질문이면 조사하지 않는다
+    llm = OllamaFastLLM("test-model", 0.0)
+    out = json.dumps({"needs_analysis": False, "tasks": [{"agent": "research", "target": "auth-service"}]})
+    monkeypatch.setattr(llm, "_chat", lambda *a, **k: (out, {"usd": 0.0}))
+    result, _ = llm.plan("billing-service 응답이 느려요", "절차")
+    assert [t for t in result["tasks"] if t["agent"] == "research"] == []
 
 
 # ── gate (교안 7단원 권위 게이트) ────────────────────────────────────────

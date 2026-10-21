@@ -41,7 +41,7 @@ from .retry import with_retry
 #     matches = [(query.index(s), s) for s in KNOWN_SYSTEMS if s in query]
 #     return min(matches)[1] if matches else "auth-service"
 # ── [P1·#14 AFTER] 공통 모듈에서 가져온다 (agent/systems.py) ──
-from .systems import DEFAULT_SYSTEM, KNOWN_SYSTEMS, mentioned_systems  # noqa: E402,F401
+from .systems import DEFAULT_SYSTEM, KNOWN_SYSTEMS, mentioned_systems, unmonitored_systems  # noqa: E402,F401
 
 
 def _extract_system_name(query: str) -> str:
@@ -209,15 +209,51 @@ _INCIDENT_TYPE_RULES = [
 ]
 
 
-def _classify_incident_type(collected: list[dict]) -> str:
-    text = " ".join(
-        f"{c['data'].get('status', '')} " + " ".join(c["data"].get("alerts", []))
-        for c in collected if c.get("source") == "monitoring"
-    ).lower()
-    for keyword, incident_type in _INCIDENT_TYPE_RULES:
-        if keyword in text:
-            return incident_type
-    return "db-down"   # 매칭되는 증상이 없으면 가장 일반적인 장애 대응 절차로 폴백
+# ── [P2 BEFORE] 모든 시스템의 알림을 한 문자열로 합친 뒤 규칙을 위에서부터 검사 ──
+#    → 정상인 web-01의 빈 알림과 auth-service 알림이 섞이고, 아무 규칙도 안 걸리면 무조건 db-down
+#    (q05 3/3건 db-down 오분류, q08 감시 대상이 아닌데도 runbook을 붙임)
+# def _classify_incident_type(collected: list[dict]) -> str:
+#     text = " ".join(
+#         f"{c['data'].get('status', '')} " + " ".join(c["data"].get("alerts", []))
+#         for c in collected if c.get("source") == "monitoring"
+#     ).lower()
+#     for keyword, incident_type in _INCIDENT_TYPE_RULES:
+#         if keyword in text:
+#             return incident_type
+#     return "db-down"   # 매칭되는 증상이 없으면 가장 일반적인 장애 대응 절차로 폴백
+# ── [P2 AFTER] 시스템을 '하나씩', 질문에 나온 순서대로 본다 (K8 근거 기반 분류) ──
+HEALTHY_STATUSES = ("healthy", "unknown")   # unknown = 모니터링 목록에 없는 시스템 (mcp_server.py:38)
+
+
+def _classify_incident_type(collected: list[dict]) -> str | None:
+    """이상이 있는 시스템 중 '먼저 나온' 시스템의 증상으로 runbook을 고른다.
+
+    - collected의 monitoring 순서 = plan의 research 순서 = 질문 언급 순서 (P1에서 보장)
+    - 정상(healthy) 시스템은 건너뛴다 → q05: web-01(정상) 건너뜀 → auth-service 'latency' → high-latency
+    - 이상 있는 시스템이 하나도 없으면 None = "runbook을 붙이지 않는다" (Before: 무조건 db-down)
+    """
+    for c in collected:
+        if c.get("source") != "monitoring":
+            continue
+        status = str(c["data"].get("status", "")).lower()
+        if status in HEALTHY_STATUSES:
+            continue   # 정상 시스템의 (빈) 알림은 분류 근거가 아니다
+        text = (status + " " + " ".join(c["data"].get("alerts", []))).lower()
+        for keyword, incident_type in _INCIDENT_TYPE_RULES:
+            if keyword in text:
+                return incident_type
+    return None   # 근거가 없으면 추측하지 않는다 (db-down 폴백 제거)
+
+
+def _no_runbook_note(query: str, collected: list[dict]) -> str:
+    """runbook을 붙이지 않을 때 write 단계에 넘길 '사실' 한 줄 (모델이 지어내지 않게 이유를 명시)."""
+    missing = unmonitored_systems(query)
+    if missing:
+        return (f"{', '.join(missing)}는 모니터링 대상(data/monitoring.json)에 없는 시스템이다. "
+                "상태를 조회할 수 없으므로 수치를 추정하지 말고, 모니터링 등록이 필요하다고 안내하라.")
+    names = [c["data"].get("system_name") for c in collected if c.get("source") == "monitoring"]
+    return (f"조사한 시스템({', '.join(n for n in names if n)})은 모두 정상이고 활성 알림이 없다. "
+            "장애 유형을 단정하지 말고 '현재 이상 징후 없음'과 추가 확인 방법을 안내하라.")
 
 
 @traceable(name="replan_check_node")
@@ -229,7 +265,15 @@ async def replan_check_node(state: AgentState, deps: SupervisorDeps) -> dict:
         verdict = {"type": "ReplanCheck", "round": rounds, "is_sufficient": True}
         return {"events": state["events"] + [verdict]}
     incident_type = _classify_incident_type(state.get("collected", []))
-    gap_task = {"id": "task-gap-runbook", "agent": "research", "kind": "runbook",
+    # ── [P2 AFTER] 분류 근거가 없으면(None) runbook gap task를 만들지 않고 그대로 진행 ──
+    #    대신 "이상 없음 / 감시 대상 아님"이라는 사실을 collected에 남겨 write가 이를 답하게 한다
+    if incident_type is None:
+        note = {"source": "note", "data": _no_runbook_note(state["query"], state.get("collected", []))}
+        verdict = {"type": "ReplanCheck", "round": rounds, "is_sufficient": True,
+                   "runbook": None, "reason": "이상 징후 없음 또는 모니터링 대상 아님"}
+        return {"collected": state.get("collected", []) + [note],
+                "events": state["events"] + [verdict]}
+    gap_task ={"id": "task-gap-runbook", "agent": "research", "kind": "runbook",
                 "target": incident_type, "status": "pending"}
     verdict = {"type": "ReplanCheck", "round": rounds, "is_sufficient": False,
                "gap_task": gap_task["id"], "target": incident_type}

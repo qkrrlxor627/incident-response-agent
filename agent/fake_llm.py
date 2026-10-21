@@ -110,7 +110,8 @@ class QualityLLM(FakeLLM):
             f"{c['data']['system_name']} 상태={c['data']['status']}, "
             f"CPU {c['data']['cpu_percent']}% (알림 {len(c['data']['alerts'])}건)"
             for c in mon)
-        lines = [f"'{query}' 진단 결과:", f"1) 모니터링: {summary}"]
+        notes = [c["data"] for c in collected if c["source"] == "note"]   # [P2 AFTER] 이상 없음/감시 대상 아님
+        lines = [f"'{query}' 진단 결과:", f"1) 모니터링: {summary or (notes[0] if notes else '')}"]
         if run:
             body_lines = [l.strip() for l in run[0]["data"].strip().splitlines() if l.strip()]
             title = body_lines[0].lstrip("# ")

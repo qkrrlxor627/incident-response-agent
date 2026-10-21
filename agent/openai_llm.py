@@ -63,7 +63,7 @@ OPENAI_URL = "https://api.openai.com/v1/chat/completions"
 #     return matched or ["auth-service"]
 # ── [#14 AFTER] 공통 모듈 agent/systems.py 하나로 모았다 (K14 모듈화) ──
 # mentioned_systems: 질문에 나온 시스템을 '언급 순서'대로 돌려준다 (Before는 sorted로 순서를 잃었다)
-from .systems import DEFAULT_SYSTEM, KNOWN_SYSTEMS, mentioned_systems  # noqa: E402
+from .systems import DEFAULT_SYSTEM, KNOWN_SYSTEMS, mentioned_systems, unmonitored_systems  # noqa: E402
 
 
 ROUTE_INSTRUCTIONS = (
@@ -191,6 +191,10 @@ class OpenAIFastLLM(OpenAILLM):
         wanted = mentioned_systems(query)   # 질문에 나온 시스템 (언급 순서)
         # 순서: 질문에 나온 순서 먼저, 그다음 모델이 추가로 고른 시스템 → P2가 '먼저 말한 시스템'을 주 시스템으로 쓴다
         ordered = list(dict.fromkeys(wanted + model_targets)) or [DEFAULT_SYSTEM]   # 아무것도 없으면 기본 시스템 (Before와 같음)
+        # ── [P2 AFTER] 감시 대상이 아닌 시스템만 나온 질문(q08 billing-service)은 조사하지 않는다 ──
+        #    Before는 기본값 auth-service(또는 모델이 고른 엉뚱한 시스템)를 대신 조사해 high-latency runbook을 붙였다
+        if not wanted and unmonitored_systems(query):
+            ordered = []
         research = [{"id": f"task-{k}", "agent": "research", "kind": "monitoring",
                      "target": target, "status": "pending"}
                     for k, target in enumerate(ordered)]
@@ -250,6 +254,8 @@ class OpenAIQualityLLM(OpenAILLM):
                 facts.append(f"- runbook 발췌:\n{c['data'].strip()}")
             elif c["source"] == "analysis":
                 facts.append(f"- 패턴 분석: {c['data'].strip()}")
+            elif c["source"] == "note":   # [P2 AFTER] runbook을 붙이지 않은 이유 (graph._no_runbook_note)
+                facts.append(f"- 확인 결과: {c['data']}")
         user = f"## 사용자 요청\n{query}\n\n## 수집된 사실\n" + "\n".join(facts)
         if feedback:
             user += f"\n\n## 이전 초안에 대한 검증 반려 사유 (반드시 반영)\n{feedback}"
