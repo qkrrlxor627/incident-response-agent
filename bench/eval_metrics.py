@@ -13,10 +13,12 @@ from pathlib import Path
 EVAL_SET = Path(__file__).resolve().parent / "eval_set.json"
 
 
+# [74% 흐름 ①-1] eval_set.json의 items를 id별 dict로 만든다. 호출하는 곳: bench/rescore.py:21
 def load_expected() -> dict[str, dict]:
     return {it["id"]: it for it in json.loads(EVAL_SET.read_text())["items"]}
 
 
+# [74% 흐름 ④-1] 한 건 채점. 호출하는 곳: bench/rescore.py:35
 def score(exp: dict, route: str | None, runbook: str | None,
           monitored: list[str] | None, reply: str | None) -> dict:
     monitored = list(dict.fromkeys(monitored or []))
@@ -26,7 +28,10 @@ def score(exp: dict, route: str | None, runbook: str | None,
     topics = exp["expected_topics"]
     return {
         "route_ok": route == exp["expected_route"],
+        # ★ 매뉴얼 정답 = 에이전트가 고른 runbook == 정답 expected_incident_type
+        #   예: q05 db-down ≠ high-latency → False. 이 값의 평균이 74%(0.739)다
         "type_ok": (runbook == exp["expected_incident_type"]) if exp["expected_route"] == "incident" else None,
+        # 조사 범위 = 정답 시스템 중 실제로 조사한 비율 (q05: 2개 중 web-01만 → 0.5)
         "system_recall": round(len(hit) / len(want), 2) if want else None,
         "system_precision": (round(len(hit) / len(monitored), 2) if monitored else None) if want
                             else (0.0 if monitored else None),
@@ -34,6 +39,7 @@ def score(exp: dict, route: str | None, runbook: str | None,
     }
 
 
+# [74% 흐름 ⑤-1] None(채점 대상 아님)은 빼고 평균. 호출하는 곳: bench/rescore.py:49
 def mean(xs):
     xs = [float(x) for x in xs if x is not None]
     return round(sum(xs) / len(xs), 3) if xs else None

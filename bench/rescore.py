@@ -18,13 +18,22 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--tag", default="baseline")
     a = ap.parse_args()
+    # [74% 흐름 ①] 정답 세트를 읽는다 — 함수 본체: bench/eval_metrics.py:17, 정답 파일: bench/eval_set.json
+    #   ▶ 다음: bench/rescore.py:25 저장된 측정 기록 읽기
     exp = load_expected()
     rows = []
+    # [74% 흐름 ②] 97% 측정 때 저장한 기록(<tag>_raw.jsonl)을 그대로 읽는다. 서버·모델 호출 없음
+    #   기록을 만든 곳: bench/run_baseline.py:136
+    #   ▶ 다음: bench/rescore.py:30 채점 대상 고르기
     for line in (ROOT / "results" / f"{a.tag}_raw.jsonl").read_text().splitlines():
         r = json.loads(line)
+        # [74% 흐름 ③] run_meta 줄과 다턴의 앞 턴은 건너뛴다 → 97%와 같은 30건
+        #   ▶ 다음: bench/rescore.py:35 한 건 채점
         if "query_id" not in r or not r.get("counted"):
             continue
         reply = (r.get("response") or {}).get("reply")
+        # [74% 흐름 ④] ★ 한 건 채점 — 함수 본체: bench/eval_metrics.py:22, 매뉴얼 정답 판정: bench/eval_metrics.py:33
+        #   ▶ 다음: bench/rescore.py:49 평균 계산
         s = score(exp[r["query_id"]], r.get("route"), r.get("runbook"), r.get("monitored_systems"), reply)
         rows.append({"id": r["query_id"], "rep": r["rep"], "ok": r["ok"],
                      "monitored": ",".join(r.get("monitored_systems") or []),
@@ -37,6 +46,10 @@ def main():
         print(f"{x['id']:4s} {x['rep']:<3d} {x['monitored'] or '-':34s} {str(x['runbook']):16s} "
               f"{f(x['route_ok']):5s} {f(x['type_ok']):4s} {f(x['system_recall']):6s} "
               f"{f(x['system_precision']):4s} {f(x['topic_coverage'])}")
+    # [74% 흐름 ⑤] 응답이 온 29건만 평균한다(타임아웃 1건은 채점할 답이 없음)
+    #   type_ok는 장애 질문에만 있어서(q09·q10은 None) 실제 분모는 23건 → 17/23 = 0.739
+    #   오답 6건: q05 ×3(db-down), q08 ×3(감시 안 하는 시스템인데 runbook을 붙임). 평균 함수: bench/eval_metrics.py:43
+    #   ▶ 다음: bench/rescore.py:65 저장
     ok_rows = [x for x in rows if x["ok"]]
     summary = {
         "응답 성공률(기존 지표)": f"{sum(x['ok'] for x in rows)}/{len(rows)}",
@@ -49,6 +62,7 @@ def main():
     print("\n## 요약 (응답 성공 건 기준)")
     for k, v in summary.items():
         print(f"- {k}: {v}")
+    # [74% 흐름 ⑥] 건별 결과를 bench/results/<tag>_accuracy.csv로 저장 (끝)
     out = ROOT / "results" / f"{a.tag}_accuracy.csv"
     with out.open("w", newline="") as fp:
         w = csv.DictWriter(fp, fieldnames=list(rows[0]))

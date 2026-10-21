@@ -81,6 +81,8 @@ def main():
     ap.add_argument("--tag", default="baseline")
     args = ap.parse_args()
 
+    # [97% 흐름 ①] 질문 10개를 읽는다 — bench/queries.json (원본: doc/regression_test_queries.md)
+    #   ▶ 다음: bench/run_baseline.py:115 질문마다 반복
     queries = json.loads((ROOT / "queries.json").read_text())
     out_dir = ROOT / "results"
     out_dir.mkdir(exist_ok=True)
@@ -110,16 +112,30 @@ def main():
         raw_path = out_dir / f"{args.tag}_raw.jsonl"
         with raw_path.open("w") as raw:
             raw.write(json.dumps({"run_meta": run_meta}, ensure_ascii=False) + "\n")
+            # [97% 흐름 ②] 질문 10개 × --repeat(3)회 × 턴 수만큼 보낸다. 다턴(q10)은 같은 thread_id로 이어 보낸다
+            #   ▶ 다음: bench/run_baseline.py:121 서버 호출
             for q in queries:
                 for rep in range(1, args.repeat + 1):
                     thread_id = f"bench-{q['id']}-r{rep}-{uuid.uuid4().hex[:6]}"
                     for turn_idx, message in enumerate(q["turns"], 1):
+                        # [97% 흐름 ③] 실제 서버(:8100) /chat 호출 — 함수 본체: bench/run_baseline.py:62
+                        #   ▶ 다음: bench/run_baseline.py:124 응답에서 조사 시스템·runbook 추출
                         status, ms, body, err = post(client, message, thread_id)
+                        # [97% 흐름 ④] 응답 events에서 route·조사한 시스템·runbook을 꺼낸다 — 함수 본체: bench/run_baseline.py:29
+                        #   (이 값이 raw 파일에 저장되고, 나중에 74% 재채점의 입력이 된다)
+                        #   ▶ 다음: bench/run_baseline.py:129 성공 판정
                         info = extract(body) if body else {}
                         is_last = turn_idx == len(q["turns"])
+                        # [97% 흐름 ⑤] ★ 성공 판정 = HTTP 200이고 에러가 없으면 성공. 답변 내용(매뉴얼이 맞는지)은 보지 않는다
+                        #   → q05처럼 틀린 db-down 매뉴얼을 줘도 ok=True (Before 문제 P8)
+                        #   그 아래 if는 q10만 해당: 마지막 답변에 '민수'가 있어야 성공 (queries.json의 expect_in_last_reply)
+                        #   ▶ 다음: bench/run_baseline.py:136 기록 저장
                         ok = status == 200 and err is None
                         if ok and is_last and q.get("expect_in_last_reply"):
                             ok = q["expect_in_last_reply"] in (body.get("reply") or "")
+                        # [97% 흐름 ⑥] 한 건 기록 → bench/results/<tag>_raw.jsonl에 한 줄씩 저장
+                        #   counted = 마지막 턴인가. 다턴은 마지막 턴만 성공률에 센다 → 33건 중 30건
+                        #   ▶ 다음: bench/run_baseline.py:164 질문별 성공률, bench/run_baseline.py:176 전체 성공률
                         row = {"query_id": q["id"], "rep": rep, "turn": turn_idx, "thread_id": thread_id,
                                "message": message, "http_status": status, "ms": round(ms),
                                "error": err, "ok": ok, "counted": is_last, **info}
@@ -145,6 +161,7 @@ def main():
             per_rep_ms = [sum(r["ms"] for r in qr if r["rep"] == rep) for rep in range(1, args.repeat + 1)]
             last = [r for r in qr if r["counted"]]
             mode = lambda key: Counter(str(r.get(key)) for r in last).most_common()
+            # [97% 흐름 ⑦] 질문별 성공률 = ok 건수 / 3 → <tag>_summary.csv의 success_rate 열 (q01만 0.67)
             w.writerow([
                 q["id"], len(last), round(sum(r["ok"] for r in last) / len(last), 2),
                 round(statistics.median(per_rep_ms)), round(p95(per_rep_ms)),
@@ -156,6 +173,9 @@ def main():
                 run_meta["llm_backend"], run_meta["fast_llm"], run_meta["quality_llm"], run_meta["started_at"],
             ])
 
+    # [97% 흐름 ⑧] ★ 전체 성공률 = counted 30건 중 ok 29건 = 0.97 (실패 1건: q01 1회차 300초 타임아웃)
+    #   터미널에 '성공률 0.97'로 출력되고, bench/results/before.md 21번째 줄에 기록했다
+    #   ▶ 이어서 74%: bench/rescore.py:21 — 같은 raw 파일을 정답 세트로 다시 채점
     all_ms = [r["ms"] for r in rows]
     counted = [r for r in rows if r["counted"]]
     print(f"\n완료: 호출 {len(rows)}건, 평균 {statistics.mean(all_ms):.0f}ms, "
