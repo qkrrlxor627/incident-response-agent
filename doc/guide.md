@@ -1186,3 +1186,131 @@ web_demo_server.py (:8600, 프록시) ──httpx──▶ server.py (:8100, Fas
   - bench summary에 노드별 중앙값 열을 추가해, 다음 측정부터 자동으로 비교되게 한다.
   - 로그 필드명은 처음 정한 이름으로 고정한다(15단원 필드 주의점: 필드명 통일).
 - 남은 작업: 로그를 파일로 남길지 터미널에만 둘지 정한다. 지금은 실습 환경이라 터미널 출력으로 충분하다고 본다.
+
+---
+
+## Before 증거 수집 — 직접 실행할 때의 터미널 명령 (2026-10-21)
+
+> 코드를 고치기 **전** 상태에서 문제 화면·문제 코드·성능(정확도 포함)을 남기는 절차다. 에이전트 코드는 바꾸지 않는다.
+> 산출물: `outputs/before/` (captures/·evidence/·scripts/) → `outputs/before/before_evidence.zip`
+> 모든 명령은 프로젝트 루트(`~/subject/1020/all_total_vue_student`)에서 실행한다.
+
+### 0) 서버 띄우기 (터미널 3개)
+
+```bash
+# 터미널 1 — Ollama (이미 떠 있으면 생략)
+ollama serve
+# 터미널 2 — 백엔드 :8100 (ollama, v2). ⚠️ session.db를 지운다
+bash sh/run_agent_ollma.sh
+# 터미널 3 — Vue 화면 :8600
+bash sh/run_frontend.sh
+
+# 확인 — llm_backend=ollama, fast=qwen3:0.6b, quality=qwen3:8b 이어야 Before 측정과 같은 조건
+curl -s localhost:8100/health
+git diff --stat baseline HEAD -- agent server.py mcp_server.py web_chat.html   # 비어 있으면 Before 코드 그대로
+```
+
+### 1) 문제 화면 캡처 (S1·S2)
+
+수동: 브라우저 `http://localhost:8600` → 아래 질문 입력 → 답변이 끝나면 `⌘⇧4`로 캡처
+- S1(P1·P2): `web-01 CPU 급증, auth-service 커넥션 풀도 같이 확인해줘` → 기대: "시스템: web-01"만, 매뉴얼 db-down
+- S2(P1): `payments-service랑 cache-service 둘 다 저하됐는데 공통 원인이 있는지 분석해줘` → 기대: payments-service만 조사
+
+자동(Playwright + 설치된 Chrome, 프로젝트 밖 가상환경):
+```bash
+python3 -m venv /tmp/capvenv && /tmp/capvenv/bin/pip install playwright==1.47.0
+mkdir -p outputs/before/captures outputs/before/evidence
+/tmp/capvenv/bin/python outputs/before/scripts/ui_capture.py \
+  outputs/before/captures/S1_q05_multi_system_db_down.png \
+  "web-01 CPU 급증, auth-service 커넥션 풀도 같이 확인해줘" \
+  --probe-health outputs/before/evidence/S5_health_during_q05.txt     # S5: 처리 중 /health 지연도 같이 기록
+/tmp/capvenv/bin/python outputs/before/scripts/ui_capture.py \
+  outputs/before/captures/S2_q06_only_one_system.png \
+  "payments-service랑 cache-service 둘 다 저하됐는데 공통 원인이 있는지 분석해줘"
+```
+- macOS `screencapture`는 터미널에 "화면 기록" 권한이 없으면 `could not create image from display`로 실패한다. 그래서 Playwright를 쓴다.
+
+### 2) 서버가 멈추는지 확인 (S5, P4)
+
+질문을 처리하는 동안 다른 터미널에서:
+```bash
+while true; do curl -s -o /dev/null -w "%{time_total}s\n" localhost:8100/health; sleep 1; done
+```
+- 2026-10-21 결과: 최대 1.73초. route·plan·analyze(동기 호출) 동안만 멈추고, 가장 긴 write는 비동기 스트림이라 막히지 않는다.
+- 최악의 경우는 Before q01이다. 동기 analyze 호출이 300초 동안 멈췄다(S11).
+
+### 3) LangSmith에서 Before 원인 꺼내기 (S3·S4·S11·S12)
+
+```bash
+set -a; source .env; set +a
+./.venv/bin/python3 -W ignore outputs/before/scripts/fetch_langsmith_evidence.py outputs/before/evidence
+```
+- S3: q05 plan 입력의 표준 절차에 `- 시스템: web-01` 한 줄만 들어 있다(P1).
+- S4: q05 전체 31.9초 중 write가 27.5초(86%)다.
+- S11: q01 300초 실패는 `ollama_fast.analyze`의 `ReadTimeout`이다(P3+P4+P5+P6). #5의 원인이 확인됐다.
+- S12: q03의 write는 65.7초/1,863토큰에서 147.4초/3,537토큰까지 차이가 나는데, 답변은 107~120자다. qwen3 thinking 토큰으로 추정된다(P9). `ollama_llm.py`에 `think` 옵션이 없다.
+- 화면 캡처가 필요하면 출력 파일 맨 위의 `# trace:` URL을 브라우저에서 열고 `⌘⇧4`로 찍는다.
+
+### 4) 입력 검증·스트림 헤더 확인 (S7, P7)
+
+```bash
+curl -sS -i --max-time 60 'http://localhost:8100/chat/stream?message=&thread_id=t-empty' | head -20
+curl -sS -o /dev/null -w '%{http_code}\n' -X POST localhost:8100/chat \
+  -H 'Content-Type: application/json' -d '{"message":"","thread_id":"t-empty2"}'
+```
+- 기대(문제): 둘 다 `200`이다. 헤더에 `Cache-Control`·`X-Accel-Buffering`이 없다. `ChatRequest.message`에 길이 조건이 없다(`server.py:36`).
+
+### 5) 서버 없이 고장 지점 재현 (S8, P1·P2·P4·P5·P10)
+
+```bash
+./.venv/bin/python3 outputs/before/scripts/repro.py "$PWD"           # plan 정규화·분류 폴백·이벤트 루프 정지·MCP timeout·v1
+./.venv/bin/python3 outputs/before/scripts/repro_stream.py "$PWD" v2  # 스트림 예외·빈 메시지·헤더·이력 (fake, 임시 DB)
+./.venv/bin/python3 outputs/before/scripts/repro_stream.py "$PWD" v1  # v1 스트림 이력 0건
+```
+
+### 6) Before 정확도 측정 (S10·S13, 미션 C4 "검색 정확도", 교안 K15)
+
+```bash
+# (a) 이미 측정한 baseline raw를 정답 세트로 다시 채점 — 서버 불필요
+./.venv/bin/python3 bench/rescore.py --tag baseline
+
+# (b) LangSmith Dataset + evaluate() — heuristic + LLM-judge(Ollama qwen3:8b, 무료). 서버 필요, 약 10~15분
+set -a; source .env; set +a
+cd bench && ../.venv/bin/python3 -W ignore eval_langsmith.py --prefix baseline; cd ..
+```
+- 정답은 `bench/eval_set.json`에 있다. `queries.json`(Before 입력)은 수정하지 않았다.
+- (a) 결과: 응답 성공률 29/30인데 runbook 정답률 0.739, 조사 범위 recall 0.775다.
+
+### 7) 문제 코드 캡처 (C01~C13)
+
+수동: VS Code에서 각 파일의 해당 줄을 열고 `⌘⇧4`로 찍는다(줄 번호는 `outputs/before/scripts/code_capture.py`의 ITEMS 목록 참고).
+자동:
+```bash
+/tmp/capvenv/bin/python outputs/before/scripts/code_capture.py "$PWD" outputs/before/captures/code
+/tmp/capvenv/bin/python outputs/before/scripts/term_render.py outputs/before/captures/terminal outputs/before/evidence/*.txt
+```
+
+### 8) 서버 상태를 바꿔야 하는 장면 (S6·S9) — 맨 마지막에
+
+```bash
+# S6(P6) 답변 도중 Ollama 종료 → 화면에 오류 표시 없이 입력창만 다시 열린다
+/tmp/capvenv/bin/python outputs/before/scripts/ui_capture.py \
+  outputs/before/captures/S6_ollama_down_silent_failure.png "log-service 디스크 공간이 부족하다는 알림이 왔어요" \
+  --during 'pkill -f "ollama serve"' --during-delay 8
+ollama serve &      # 다시 켜기
+
+# S9(P10) v1 롤백 모드 — 장애 질문에도 모니터링을 조회하지 않는다
+lsof -ti:8100 | xargs kill -9
+set -a; source .env; set +a
+LANGCHAIN_PROJECT=capstone-all-total-ollama LLM_BACKEND=ollama SUPERVISOR_VERSION=v1 ./.venv/bin/python3 server.py &
+/tmp/capvenv/bin/python outputs/before/scripts/ui_capture.py \
+  outputs/before/captures/S9_v1_no_monitoring.png "web-01 장애 진단해줘"
+lsof -ti:8100 | xargs kill -9 && bash sh/run_agent_ollma.sh    # v2로 되돌리기
+```
+
+### 9) 묶기·정리
+
+```bash
+cd outputs && zip -r before/before_evidence.zip before -x 'before/before_evidence.zip' && cd ..
+lsof -ti:8100,8600 | xargs kill -9 2>/dev/null; pkill -f "ollama serve"   # 끝나면 종료
+```

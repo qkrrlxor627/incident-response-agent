@@ -165,7 +165,7 @@ LANGCHAIN_TRACING_V2=false LLM_BACKEND=fake SUPERVISOR_VERSION=v2 ./.venv/bin/py
 - `workLog.md`에는 프로젝트 진행만 남긴다.
 - `workClaude.md`도 로컬 전용이다(`.git/info/exclude`). `CLAUDE.md`에 갱신 규칙을 1줄 추가했다.
 
-### 13. 파일별 워크스루 (진행 중 — 6/8단계까지 완료, 3~6단계는 10-21)
+### 13. 파일별 워크스루 (완료 — 3~8단계는 10-21)
 
 작업에 들어가기 전에 코드를 파일 단위로 같이 읽으면서, `doc/guide.md`의 문제 기록(#1~#12)이 실제 코드 어디에 있는지 확인하고 있다. 코드는 아직 수정하지 않았다.
 
@@ -178,8 +178,8 @@ LANGCHAIN_TRACING_V2=false LLM_BACKEND=fake SUPERVISOR_VERSION=v2 ./.venv/bin/py
 | 4 | `agent/mcp_client.py` + `agent/retry.py` | #11 | ✅ (10-21) |
 | 5 | `fake_llm.py` · `session_store.py` · `supervisor_v1.py` | #6 | ✅ (10-21) |
 | 6 | `mcp_server.py` · `mcp_server_docs.py` | — | ✅ (10-21) |
-| 7 | `web_demo_server.py` + `web_chat.html` | #3 #10 | ⬜ **다음 차례** |
-| 8 | `bench/run_baseline.py` + `queries.json` | #7 #12 | ⬜ |
+| 7 | `web_demo_server.py` + `web_chat.html` | #3 #10 | ✅ (10-21) |
+| 8 | `bench/run_baseline.py` + `queries.json` | #7 #12 | ✅ (10-21) |
 
 1~2단계에서 확인한 내용:
 - `server.py`
@@ -308,6 +308,58 @@ LANGCHAIN_TRACING_V2=false LLM_BACKEND=fake SUPERVISOR_VERSION=v2 ./.venv/bin/py
 | #11 | MCP timeout 예외 타입 | 재현: 5초 걸리는 tool + timeout 1초 | `mcp.shared.exceptions.MCPError: Request 'tools/call' timed out`. `asyncio.TimeoutError`가 아니어서 `with_retry`는 **1회만 시도**하고 바로 실패한다 |
 | v1 | 롤백 경로 | 재현: chat 답변에 "도와드릴까요"가 없을 때 | 모니터링 조회를 하지 않고 chat 답변을 그대로 반환한다. 실모델 롤백 경로로 쓸 수 없다 |
 
+### 4. 워크스루 7단계 — `web_demo_server.py` + `web_chat.html` (완료, 코드 수정 없음)
+
+fake 백엔드와 임시 session DB로 `/chat/stream`을 직접 호출해 확인했다(FastAPI TestClient). 프로젝트의 `session.db`는 바뀌지 않았다.
+
+| 항목 | 결과 | 관련 |
+|---|---|---|
+| 처리 중 예외 | 스트림이 예외로 끊긴다. `[DONE]`도 오류 이벤트도 내려가지 않는다. 화면은 `es.onerror`에서 조용히 입력창만 복구한다(`web_chat.html`) | #3 확인 |
+| 예외 난 턴의 이력 | 0건. 사용자 메시지도 저장되지 않는다 | #10 확인 |
+| 빈 메시지 | 200으로 그대로 처리된다(기대값은 422) | #10 확인 |
+| SSE 헤더 | `Cache-Control`, `X-Accel-Buffering` 둘 다 없다 | #10 확인 |
+| **v1 + 스트림 이력** | **정상 완료해도 0건 저장(새로 발견).** `server.py`의 `/chat/stream` v1 분기에 `session_store.append`가 없다. `/chat`은 v1도 저장한다 | #10에 추가 |
+
+그 밖에:
+- `web_demo_server.py`
+  - 스트림 중계가 `timeout=None`이다. 백엔드가 멈추면 브라우저도 끝없이 기다린다.
+  - `/health` 중계는 백엔드가 꺼져 있으면 500이 난다. 프런트가 catch하므로 라벨만 안 바뀐다.
+- `web_chat.html`
+  - Vue CDN 주소가 `vue@3`이라 버전이 고정돼 있지 않다.
+  - 헤더 라벨은 fake 모드에서도 "실모델"이라고 표시한다.
+
+### 5. 워크스루 8단계 — `bench/run_baseline.py` + `queries.json` (완료)
+
+- #7 확인
+  - `ok = status == 200 and err is None`(120)이라서, 응답만 오면 성공으로 센다.
+  - `queries.json`의 `expected_incident_type`이 10건 모두 빈칸이다. 기대 조사 시스템 필드도 없다.
+  - 다만 raw에 `monitored_systems`, `incident_type`이 남아 있어서, 기대값만 채우면 **baseline을 다시 측정하지 않고도** 정답률을 다시 계산할 수 있다.
+- #5/#12
+  - bench 클라이언트의 `TIMEOUT = 300.0`(26)과 서버의 LLM httpx timeout 300초가 같다.
+  - q01의 `ReadTimeout`은 **클라이언트 쪽**에서 끊긴 것이다. 서버가 어느 단계에서 멈췄는지는 기록이 없다.
+
+### 6. Before 증거 수집 (코드 수정 전 전처리, 완료)
+
+- 산출물: `outputs/before/`
+  - 화면 4장, 코드 13장, 터미널 11장, 원본 텍스트 증거, 재현 스크립트
+  - `README.md`: 문제 → 증거 → 교안 기준 개선안 표
+  - 묶음: `outputs/before/before_evidence.zip`
+- 실행 조건: ollama, `qwen3:0.6b`/`qwen3:8b`, v2(S9만 v1). 에이전트 코드는 `baseline` 태그와 같다.
+- 정확도 측정 구축(미션 C4 "검색 정확도", 교안 K15)
+  - 정답 세트 `bench/eval_set.json`. `queries.json`은 수정하지 않았다.
+  - `bench/rescore.py`: 이미 측정한 raw를 다시 채점한다.
+  - `bench/eval_langsmith.py`: LangSmith Dataset + `evaluate()`. heuristic과 LLM-judge(Ollama qwen3:8b, 무료)를 섞었다.
+  - Before 결과: runbook 정답률 0.739 / 0.75, 조사 범위 recall 0.775 / 0.786, judge 0.855. LangSmith 실험명은 `baseline-36e5189f`다.
+- 새로 확정된 것
+  - **#5 원인**: q01 300초 실패는 `ollama_fast.analyze`의 300초 `ReadTimeout`이다(P3+P4+P6+P9).
+  - q03 편차는 write 토큰 수에 비례한다(1,863 → 3,537). qwen3 thinking 토큰으로 추정한다.
+  - P4 실측: q05 처리 중 `/health` 지연은 최대 1.73초다.
+  - `/chat`도 빈 메시지를 200으로 받는다.
+  - Ollama를 끄면 화면이 오류 표시 없이 멈춘다(S6).
+  - v1은 장애 질문에 모니터링을 조회하지 않는다(S9).
+- 직접 다시 실행하는 명령은 `doc/guide.md` 맨 끝 절에 정리했다.
+- 캡처 방식: macOS `screencapture`는 화면 기록 권한이 없어 실패했다. 그래서 Playwright(스크래치 가상환경)로 설치된 Chrome을 조종해 캡처했다.
+
 ---
 
 ## 컴퓨터를 다시 켰을 때 (재시작 절차)
@@ -378,7 +430,7 @@ lsof -ti:8100,8600 | xargs kill -9 2>/dev/null
 cd ~/subject/1020/all_total_vue_student
 claude --continue                  # 마지막 대화를 그대로 이어서 연다
 ```
-- 이어서 연 뒤 "workLog 13번 워크스루 7단계부터 이어서 하자"라고 말하면 된다.
+- 이어서 연 뒤 "workLog 13번 workLog 10-21 5번 수정 순서대로 이어서 하자"라고 말하면 된다.
 - 대화를 새로 시작해도 이 파일 13번 표와 `doc/guide.md`(#1~#12)를 보면 어디까지 했는지 알 수 있다.
 
 ---

@@ -1,0 +1,4 @@
+# Before q03 3회 — write 단계 소요 시간·토큰 vs 답변 길이
+rep1: 전체   70.6s | write   65.7s | tokens(prompt+eval)  1863 | 답변 120자
+rep2: 전체  152.2s | write  147.4s | tokens(prompt+eval)  3537 | 답변 114자
+rep3: 전체   92.7s | write   87.6s | tokens(prompt+eval)  2296 | 답변 107자

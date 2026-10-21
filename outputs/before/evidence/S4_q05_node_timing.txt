@@ -1,0 +1,12 @@
+# Before q05 1회차 단계별 소요 시간 (LangSmith trace, 전체 31.86s)
+route             0.95s  
+plan              1.89s  #
+gate              0.00s  
+research          0.36s  
+replan_check      0.00s  
+research          0.37s  
+replan_check      0.00s  
+analysis          0.81s  
+write            27.45s  ###########################
+validate          0.00s  
+finalize          0.00s  

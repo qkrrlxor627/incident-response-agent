@@ -1,0 +1,22 @@
+$ python repro.py   # 모델 출력을 고정하고 실제 agent 코드를 실행한 재현
+=== 1. plan() 정규화 ===
+- 모델이 web-01 task 1개만 줌        → 조사 대상 ['web-01']  needs_analysis=True
+- 모델이 target 2개를 오타로 줌         → 조사 대상 ['web-01']  needs_analysis=False
+- 모델이 research 0개 (복구 경로)      → 조사 대상 ['auth-service', 'web-01']  needs_analysis=False
+=== 2. q05 plan 입력의 표준 절차(MCP Prompt) ===
+- 시스템: web-01
+- 증상: web-01 CPU 급증, auth-service 커넥션 풀도 같이 확인해줘
+1. get_monitoring_status Tool로 관련 시스템의 현재 상태를 조회하세요.
+2. 증상에 해당하는 runbook(runbook://incident-response/...)을 확인하세요.
+=== 3. 분류 폴백 ===
+- web-01           status=healthy   → db-down
+- no-such-service  status=unknown   → db-down
+- auth-service     status=degraded  → high-latency
+=== 4. 동기 LLM 호출 중 이벤트 루프 정지 (#4) ===
+- route_node 2.0초 동안 다른 작업 tick: 1회 (정상이면 ~20회)  경과 2.0s
+=== 5. MCP timeout 예외 vs with_retry (#11) ===
+- 예외 타입: mcp.shared.exceptions.MCPError: Request 'tools/call' timed out
+- asyncio.TimeoutError인가? False
+- with_retry 시도 횟수: 1회 (재시도 동작하면 3회)  경과 1.0s
+=== 6. v1 롤백 경로 ===
+- 실모델풍 답변일 때 모니터링 조회 여부: False  → 최종: 'web-01 CPU 급증 원인을 확인해 보겠습니다.'

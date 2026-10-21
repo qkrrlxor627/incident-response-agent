@@ -1,0 +1,7 @@
+# Before q01 1회차 (300초 타임아웃) — LangSmith trace
+# trace: https://smith.langchain.com/o/35e707dd-9517-4d01-b461-62b2e15d7fcd/projects/p/33970ca1-c0b5-4994-801b-474fcb645fa2/r/01a157bc-3f4f-7602-92d7-f1e949e3c114?poll=true
+
+chat_request           error      314.86s  ReadTimeout('timed out')
+ollama_fast.route      success      9.79s  
+ollama_fast.plan       success      2.07s  
+ollama_fast.analyze    error      300.07s  ReadTimeout('timed out')

@@ -1,0 +1,37 @@
+# Before 측정(baseline) q05 1회차 — LangSmith ollama_fast.plan 실행 기록
+# trace: https://smith.langchain.com/o/35e707dd-9517-4d01-b461-62b2e15d7fcd/projects/p/33970ca1-c0b5-4994-801b-474fcb645fa2/r/01a157ca-f8a7-7d78-a726-c6920931db05?poll=true
+
+## 입력 procedure_prompt (MCP Prompt 결과)
+다음 장애에 대해 표준 진단 절차를 수행하세요.
+
+## 장애 정보
+- 시스템: web-01
+- 증상: web-01 CPU 급증, auth-service 커넥션 풀도 같이 확인해줘
+
+## 진단 절차 (반드시 순서대로 수행)
+1. get_monitoring_status Tool로 관련 시스템의 현재 상태를 조회하세요.
+2. 증상에 해당하는 runbook(runbook://incident-response/...)을 확인하세요.
+3. 위 정보를 종합해 가능한 원인과 권장 조치를 제시하세요.
+
+## 입력 query
+web-01 CPU 급증, auth-service 커넥션 풀도 같이 확인해줘
+
+## 출력 (코드 정규화 후)
+{
+ "needs_analysis": true,
+ "tasks": [
+  {
+   "agent": "analysis",
+   "id": "task-analysis",
+   "kind": "pattern-analysis",
+   "status": "pending"
+  },
+  {
+   "agent": "research",
+   "id": "task-0",
+   "kind": "monitoring",
+   "status": "pending",
+   "target": "web-01"
+  }
+ ]
+}

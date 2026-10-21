@@ -1,0 +1,8 @@
+# S6 — 답변 작성 중 Ollama 종료 시 백엔드 로그 (화면에는 오류 표시 없음)
+$ pkill -f "ollama serve"   # 질문 전송 8초 뒤
+37:Traceback (most recent call last):
+54:    with map_exceptions({h11.RemoteProtocolError: RemoteProtocolError}):
+59:httpcore.RemoteProtocolError: peer closed connection without sending complete message body (incomplete chunked read)
+63:Traceback (most recent call last):
+158:httpx.RemoteProtocolError: peer closed connection without sending complete message body (incomplete chunked read)
+159:During task with name 'write' and id '2735f91f-26b6-cd2b-d584-29062d6e4659'

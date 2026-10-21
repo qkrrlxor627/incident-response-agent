@@ -1,0 +1,25 @@
+$ curl -sS -i --max-time 60 'http://localhost:8100/chat/stream?message=&thread_id=t-empty'
+HTTP/1.1 200 OK
+date: Wed, 21 Oct 2026 02:41:01 GMT
+server: uvicorn
+content-type: text/event-stream; charset=utf-8
+Transfer-Encoding: chunked
+
+data: {"type": "RouteDecided", "route": "chat", "node": "route"}
+
+data: {"type": "AnswerToken", "delta": "안"}
+
+data: {"type": "AnswerToken", "delta": "녕"}
+
+data: {"type": "AnswerToken", "delta": "하세요"}
+
+data: {"type": "AnswerToken", "delta": "!"}
+
+data: {"type": "AnswerToken", "delta": " 어떤"}
+
+data: {"type": "AnswerToken", "delta": " 문제"}
+
+
+$ curl -sS -o /dev/null -w '%{http_code}
+' -X POST localhost:8100/chat -H 'Content-Type: application/json' -d '{"message":"","thread_id":"t-empty2"}'
+200

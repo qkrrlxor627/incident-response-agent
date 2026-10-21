@@ -1,0 +1,33 @@
+{
+  "_doc": "bench/queries.json(입력)에 대한 정답 세트. queries.json은 Before 측정 입력이라 수정하지 않고 정답만 여기에 둔다. 근거는 data/monitoring.json의 alerts와 graph._INCIDENT_TYPE_RULES 키워드. expected_incident_type=null은 '장애 유형을 붙이면 안 됨(조사 대상 없음)'을 뜻한다.",
+  "items": [
+    {"id": "q01", "expected_route": "incident", "expected_systems": ["payments-service"], "expected_incident_type": "cpu-spike",
+     "expected_topics": ["payments-service", "CPU"],
+     "rationale": "payments-service alerts 'CPU 91% (threshold 80%)' → cpu 규칙"},
+    {"id": "q02", "expected_route": "incident", "expected_systems": ["cache-service"], "expected_incident_type": "memory-leak",
+     "expected_topics": ["cache-service", "메모리"],
+     "rationale": "cache-service alerts 'memory usage climbing', 'heap near limit' → memory 규칙"},
+    {"id": "q03", "expected_route": "incident", "expected_systems": ["log-service"], "expected_incident_type": "disk-full",
+     "expected_topics": ["log-service", "디스크"],
+     "rationale": "log-service alerts 'disk usage 95% on /var/log' → disk 규칙"},
+    {"id": "q04", "expected_route": "incident", "expected_systems": ["gateway-service", "payments-service"], "expected_incident_type": "network-timeout",
+     "expected_topics": ["gateway-service", "payments-service", "타임아웃"],
+     "rationale": "질문의 증상은 타임아웃이고 gateway-service alerts 'upstream timeout to payments-service (504)' → timeout 규칙. 두 시스템 모두 언급됨"},
+    {"id": "q05", "expected_route": "incident", "expected_systems": ["web-01", "auth-service"], "expected_incident_type": "high-latency",
+     "expected_topics": ["web-01", "auth-service", "커넥션 풀"],
+     "rationale": "web-01은 healthy(alerts 없음). 이상이 있는 시스템은 auth-service뿐이고 alerts 'p95 latency', 'connection pool 92%' → latency/pool 규칙"},
+    {"id": "q06", "expected_route": "incident", "expected_systems": ["payments-service", "cache-service"], "expected_incident_type": "cpu-spike",
+     "expected_topics": ["payments-service", "cache-service", "공통"],
+     "rationale": "처음 언급된 payments-service alerts 'CPU 91%' → cpu 규칙. 두 시스템 비교 분석 요청"},
+    {"id": "q07", "expected_route": "incident", "expected_systems": ["auth-service"], "expected_incident_type": "high-latency",
+     "expected_topics": ["auth-service", "응답"],
+     "rationale": "시스템 미언급 → 로그인=auth-service 폴백(설계 의도). alerts 'p95 latency' → latency 규칙"},
+    {"id": "q08", "expected_route": "incident", "expected_systems": [], "expected_incident_type": null,
+     "expected_topics": ["billing-service"],
+     "rationale": "billing-service는 모니터링 대상(data/monitoring.json)에 없음. 관련 없는 시스템(auth-service)을 조사하거나 장애 유형을 붙이면 오답. '모니터링 대상이 아님'을 알려야 함"},
+    {"id": "q09", "expected_route": "chat", "expected_systems": [], "expected_incident_type": null,
+     "expected_topics": [], "rationale": "인사·잡담 → chat"},
+    {"id": "q10", "expected_route": "chat", "expected_systems": [], "expected_incident_type": null,
+     "expected_topics": ["민수"], "rationale": "2턴째 답에 1턴째 이름(민수) 포함 = 세션 기억"}
+  ]
+}
