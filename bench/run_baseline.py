@@ -21,9 +21,9 @@ from pathlib import Path
 
 import httpx
 
-ROOT = Path(__file__).resolve().parent
-BASE = "http://localhost:8100"
-TIMEOUT = 300.0
+ROOT = Path(__file__).resolve().parent # 이 경로를 기준으로 질문 목록을 읽고 결과를 bench/results/<tag>_raw.jsonl, bench/results/<tag>_summary.csv에 쓴다
+BASE = "http://localhost:8100" # 측정 대상인 백엔드 서버 주소
+TIMEOUT = 300.0 # 서버 호출 타임아웃. q01 1회차에서 300초 넘어가면 실패(ok=False)로 기록하고 다음 질문으로 넘어간다
 
 
 def extract(body: dict) -> dict:

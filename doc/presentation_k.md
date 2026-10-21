@@ -50,7 +50,7 @@
 | ④ 가설 — 추정 | 모델 task와 별개로 쿼리에 나온 KNOWN_SYSTEMS를 코드가 보충하면, 조사 누락과 오분류가 함께 사라진다 |
 | ⑤ 실험 | 위 보충 로직을 추가한다. `git tag baseline`으로 되돌릴 수 있다 |
 | ⑥ 결과 검증 | 【After 측정 후 기입】 |
-| ⑦ 재발 방지 | `_guess_targets` / `_classify_incident_type` 단위 테스트(pytest)를 추가할 예정이다 |
+| ⑦ 재발 방지 | `tests/test_agent_units.py`에 P1 재현 테스트를 `xfail(strict=True)`로 고정했다. 고치면 XPASS가 나므로 마커를 지워 회귀 테스트로 전환한다 |
 
 ### 부 개선 후보 (시간이 되면)
 - analysis 남발: incident 8종 중 7종에서 비교 분석이 실행됐다. 원인은 `needs_analysis=true` 남발로 추정한다.
@@ -83,7 +83,7 @@
 | 동시 실행 | `research_node`의 `asyncio.gather` | 12 | 시스템별 조회를 병렬로 처리한다 |
 | 세션 | `agent/session_store.py` (SQLite) | 13 | 서버를 재시작해도 대화를 기억한다 |
 | **LangSmith** | 각 노드의 `@traceable` | 15 | 요청 1건이 계층 트리로 기록된다(`langsmith_run_id`) |
-| **단위 테스트** | **현재 없음** | 14 | 이번 개선에서 pytest를 추가할 예정이다(⑦과 연결) |
+| **단위 테스트** | `tests/test_agent_units.py`, `tests/conftest.py` (pytest) | 14 | LLM·MCP·서버 없이 순수 함수만 검증한다: 시스템명 추출, `_guess_targets`, 분류 규칙(5종 + 폴백 + 순서), gate, validate, P1 재현(xfail). 기록된 결과: 15 passed, 1 xfailed(`doc/workLog.md`) |
 
 ### 3-2. 캡처 체크리스트
 
@@ -154,4 +154,4 @@
 2. **분류를 왜 LLM이 아니라 코드로 하나요?**
    → 0.6b 모델은 출력이 흔들립니다. 실측 데이터로 검증할 수 있는 결정은 코드가 내린다는 원칙입니다(gate, replan과 같은 설계). 3회 반복에서 분류가 100% 일치했습니다.
 3. **단위 테스트는 어디 있나요?**
-   → 【개선 후 기입: `tests/` 경로와 테스트 개수】. 이번에 고친 `_guess_targets`와 분류 규칙부터 테스트로 고정했습니다.
+   → `tests/test_agent_units.py`에 테스트 함수 12개(parametrize 포함 16케이스)가 있습니다. LLM·MCP·서버 없이 순수 함수만 검증합니다. P1 버그는 `xfail(strict=True)`로 먼저 고정했고, 고치면 정식 회귀 테스트로 바뀝니다. 【개선 후 기입: 최종 passed 수】
