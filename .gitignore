@@ -1,6 +1,8 @@
 .env
 .venv/
 session.db
+session.db-wal
+session.db-shm
 __pycache__/
 *.log
 
