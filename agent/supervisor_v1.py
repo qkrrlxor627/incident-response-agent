@@ -11,16 +11,11 @@
   조회 대상은 공통 모듈(agent/systems.py)의 research_targets로 질문에서 뽑는다.
   v1의 목적(단순한 선형 경로, 즉시 롤백)은 유지하고 LLM 호출 수는 늘리지 않는다.
 """
-import re
-
 from langsmith import traceable
 
 from .deps import SupervisorDeps
 from .retry import with_retry
-from .systems import mentioned_systems, research_targets
-
-# v2 route_node의 형식 붕괴 fallback(agent/ollama_llm.py route)과 같은 규칙 + 증상 단어
-INCIDENT_PATTERN = re.compile(r"장애|진단|다운|지연|급증|저하|느려|느리|타임아웃|부족|오류|에러|원인|incident|티켓")
+from .systems import looks_like_incident, research_targets
 
 
 @traceable(name="supervisor_v1_legacy")
@@ -36,8 +31,8 @@ async def run_v1(deps: SupervisorDeps, query: str, thread_id: str,
     #              f"CPU {data['cpu_percent']}% 입니다. 자세한 절차는 담당자에게 문의하세요.")
     #     events.append({"type": "TaskCompleted", "source": "monitoring", "retries": retries})
     # [P10 AFTER] 질문 자체로 장애 여부를 판단한다 (LLM 응답 문구에 의존하지 않음)
-    # 증상 단어가 있거나, 모니터링하는 시스템 이름이 나오면 장애 질문으로 본다
-    if INCIDENT_PATTERN.search(query) or mentioned_systems(query):
+    # 증상 단어가 있거나 시스템 이름이 나오면 장애 질문으로 본다 (agent/systems.py looks_like_incident)
+    if looks_like_incident(query):
         lines, retries_total = [], 0
         for system in research_targets(query):   # 질문에 나온 시스템 전부 (없으면 기본 auth-service)
             data, retries = await with_retry(

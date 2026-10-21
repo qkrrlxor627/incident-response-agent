@@ -440,3 +440,28 @@ def test_v1_plain_chat_does_not_call_monitoring():
     mcp = _V1MCP()
     out = asyncio.run(run_v1(SimpleNamespace(mcp=mcp, fast_llm=_ChatLLM()), "안녕", "t", []))
     assert mcp.asked == [] and out["final"] == "안녕하세요"
+
+
+# ── P9 후속: route 권위 보정 (After 측정에서 발견한 회귀) ─────────────────
+QUERIES = json.loads((__import__("pathlib").Path(__file__).resolve().parent.parent / "bench" / "queries.json").read_text())
+
+
+@pytest.mark.parametrize("q", QUERIES, ids=lambda q: q["id"])
+def test_looks_like_incident_matches_every_benchmark_query(q):
+    from agent.systems import looks_like_incident
+    expected = q["id"] not in ("q09", "q10")   # q09·q10만 일반 대화
+    assert all(looks_like_incident(t) == expected for t in q["turns"])
+
+
+class _IncidentRouter:
+    async def route(self, query):
+        return {"route": "incident", "needs_analysis": False}, {"usd": 0.0}
+
+
+def test_route_corrects_self_introduction_to_chat():
+    from types import SimpleNamespace
+
+    from agent.graph import route_node
+    out = asyncio.run(route_node({"query": "제 이름은 민수입니다", "events": []},
+                                 SimpleNamespace(fast_llm=_IncidentRouter())))
+    assert out["route"] == "chat" and out["events"][-1]["corrected_from"] == "incident"

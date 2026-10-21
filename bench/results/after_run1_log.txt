@@ -1,0 +1,39 @@
+run_meta: {"tag": "after", "started_at": "2026-10-21T21:25:39+09:00", "llm_backend": "ollama", "fast_llm": "ollama:qwen3:0.6b", "quality_llm": "ollama:qwen3:8b", "supervisor_version": "v2", "instance_id": 4536188048, "repeat": 3}
+warmup: {'status': 200, 'ms': 11529, 'error': None, 'retry_count': 1}
+q01 r1 t1: 200 13428ms route=incident type=cpu-spike runbook=cpu-spike ok=True
+q01 r2 t1: 200 14455ms route=incident type=cpu-spike runbook=cpu-spike ok=True
+q01 r3 t1: 200 16806ms route=incident type=cpu-spike runbook=cpu-spike ok=True
+q02 r1 t1: 200 26737ms route=incident type=memory-leak runbook=memory-leak ok=True
+q02 r2 t1: 200 23324ms route=incident type=memory-leak runbook=memory-leak ok=True
+q02 r3 t1: 200 20670ms route=incident type=memory-leak runbook=memory-leak ok=True
+q03 r1 t1: 200 11847ms route=incident type=disk-full runbook=disk-full ok=True
+q03 r2 t1: 200 11481ms route=incident type=disk-full runbook=disk-full ok=True
+q03 r3 t1: 200 11740ms route=incident type=disk-full runbook=disk-full ok=True
+q04 r1 t1: 200 15024ms route=incident type=network-timeout runbook=network-timeout ok=True
+q04 r2 t1: 200 11238ms route=incident type=network-timeout runbook=network-timeout ok=True
+q04 r3 t1: 200 11131ms route=incident type=network-timeout runbook=network-timeout ok=True
+q05 r1 t1: 200 17453ms route=incident type=high-latency runbook=high-latency ok=True
+q05 r2 t1: 200 16978ms route=incident type=high-latency runbook=high-latency ok=True
+q05 r3 t1: 200 16825ms route=incident type=high-latency runbook=high-latency ok=True
+q06 r1 t1: 200 13165ms route=incident type=cpu-spike runbook=cpu-spike ok=True
+q06 r2 t1: 200 11969ms route=incident type=cpu-spike runbook=cpu-spike ok=True
+q06 r3 t1: 200 12723ms route=incident type=cpu-spike runbook=cpu-spike ok=True
+q07 r1 t1: 200 13111ms route=incident type=high-latency runbook=high-latency ok=True
+q07 r2 t1: 200 12674ms route=incident type=high-latency runbook=high-latency ok=True
+q07 r3 t1: 200 12375ms route=incident type=high-latency runbook=high-latency ok=True
+q08 r1 t1: 200 8222ms route=incident type=None runbook=None ok=True
+q08 r2 t1: 200 7462ms route=incident type=None runbook=None ok=True
+q08 r3 t1: 200 7435ms route=incident type=None runbook=None ok=True
+q09 r1 t1: 200 352ms route=chat type=None runbook=None ok=True
+q09 r2 t1: 200 194ms route=chat type=None runbook=None ok=True
+q09 r3 t1: 200 202ms route=chat type=None runbook=None ok=True
+q10 r1 t1: 200 13779ms route=incident type=high-latency runbook=high-latency ok=True
+q10 r1 t2: 200 243ms route=chat type=None runbook=None ok=True
+q10 r2 t1: 200 14049ms route=incident type=high-latency runbook=high-latency ok=True
+q10 r2 t2: 200 199ms route=chat type=None runbook=None ok=True
+q10 r3 t1: 200 14593ms route=incident type=high-latency runbook=high-latency ok=True
+q10 r3 t2: 200 215ms route=chat type=None runbook=None ok=True
+
+완료: 호출 33건, 평균 11579ms, 중앙값 12674ms, 성공률 1.00
+저장: /Users/qkrrlxor627/subject/1020/all_total_vue_student/bench/results/after_raw.jsonl
+      /Users/qkrrlxor627/subject/1020/all_total_vue_student/bench/results/after_summary.csv

@@ -44,7 +44,8 @@ from .retry import with_retry
 #     matches = [(query.index(s), s) for s in KNOWN_SYSTEMS if s in query]
 #     return min(matches)[1] if matches else "auth-service"
 # ── [P1·#14 AFTER] 공통 모듈에서 가져온다 (agent/systems.py) ──
-from .systems import DEFAULT_SYSTEM, KNOWN_SYSTEMS, mentioned_systems, unmonitored_systems  # noqa: E402,F401
+from .systems import (DEFAULT_SYSTEM, KNOWN_SYSTEMS, looks_like_incident,  # noqa: E402,F401
+                      mentioned_systems, unmonitored_systems)
 
 
 def _extract_system_name(query: str) -> str:
@@ -92,7 +93,14 @@ async def route_node(state: AgentState, deps: SupervisorDeps) -> dict:
     """Wave 5 — 모든 쿼리가 무거운 파이프라인을 탈 필요는 없다."""
     # [P4 BEFORE] result, usage = deps.fast_llm.route(state["query"])   ← 동기 호출: 이벤트 루프 정지
     result, usage = await deps.fast_llm.route(state["query"])   # [P4 AFTER] await
-    event = {"type": "RouteDecided", "route": result["route"]}
+    # ── [P9 후속 AFTER] route 권위 보정 — After 측정에서 발견한 회귀 ──
+    #    think를 끈 0.6b 라우터가 q10 "제 이름은 민수입니다"를 incident로 분류 → 장애 파이프라인 14초 (3/3)
+    #    증상 단어도 시스템 이름도 없는 질문은 코드가 chat으로 바로잡는다 (K6: 확인 가능한 판단은 코드가 내린다)
+    corrected = result["route"] == "incident" and not looks_like_incident(state["query"])
+    if corrected:
+        result = {**result, "route": "chat"}
+    event = {"type": "RouteDecided", "route": result["route"],
+             **({"corrected_from": "incident"} if corrected else {})}
     return {"route": result["route"], "needs_analysis": result["needs_analysis"],
             "cost_usd": _cost(state, usage),
             "events": state.get("events", []) + [event]}

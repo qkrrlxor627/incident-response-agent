@@ -1,0 +1,7 @@
+# 1차 After 측정에서 발견한 회귀 — q10 1턴 '제 이름은 민수입니다'가 incident로 분류됨 (bench/results/after_run1_raw.jsonl)
+1차(보정 전) rep 1 | RouteDecided: {'type': 'RouteDecided', 'route': 'incident'} | 13779 ms | 노드: ['route', 'plan', 'gate', 'research', 'replan_check', 'analysis', 'write', 'validate', 'finalize']
+1차(보정 전) rep 2 | RouteDecided: {'type': 'RouteDecided', 'route': 'incident'} | 14049 ms | 노드: ['route', 'plan', 'gate', 'research', 'replan_check', 'analysis', 'write', 'validate', 'finalize']
+1차(보정 전) rep 3 | RouteDecided: {'type': 'RouteDecided', 'route': 'incident'} | 14593 ms | 노드: ['route', 'plan', 'gate', 'research', 'replan_check', 'analysis', 'write', 'validate', 'finalize']
+2차(보정 후) rep 1 | RouteDecided: {'type': 'RouteDecided', 'route': 'chat', 'corrected_from': 'incident'} | 271 ms | 노드: ['route', 'chat_answer']
+2차(보정 후) rep 2 | RouteDecided: {'type': 'RouteDecided', 'route': 'chat', 'corrected_from': 'incident'} | 258 ms | 노드: ['route', 'chat_answer']
+2차(보정 후) rep 3 | RouteDecided: {'type': 'RouteDecided', 'route': 'chat', 'corrected_from': 'incident'} | 317 ms | 노드: ['route', 'chat_answer']

@@ -67,6 +67,16 @@ def research_targets(query: str) -> list[str]:
     return [] if unmonitored_systems(query) else [DEFAULT_SYSTEM]
 
 
+# 장애 질문의 증상 단어 (v1 롤백 경로와 v2 route 보정이 같이 쓴다)
+INCIDENT_PATTERN = re.compile(r"장애|진단|다운|지연|급증|저하|느려|느리|타임아웃|부족|오류|에러|원인|"
+                              r"치솟|올라가|알림|incident|티켓")
+
+
+def looks_like_incident(query: str) -> bool:
+    """증상 단어가 있거나, 시스템 이름(감시 대상이든 아니든)이 나오면 장애 질문으로 본다."""
+    return bool(INCIDENT_PATTERN.search(query) or mentioned_systems(query) or unmonitored_systems(query))
+
+
 def primary_system(query: str) -> str:
     """주 시스템 = 질문에서 가장 먼저 나온 시스템. 없으면 기본 시스템."""
     found = mentioned_systems(query)
