@@ -465,3 +465,54 @@ def test_route_corrects_self_introduction_to_chat():
     out = asyncio.run(route_node({"query": "제 이름은 민수입니다", "events": []},
                                  SimpleNamespace(fast_llm=_IncidentRouter())))
     assert out["route"] == "chat" and out["events"][-1]["corrected_from"] == "incident"
+
+
+# ── 새로 발견된 문제 N1~N6 (탐색 스윕 outputs/after/scripts/explore_sweep.py) ─────
+def test_n1_chat_history_drops_incident_reports():
+    from agent.graph import _chat_history
+    h = [{"role": "user", "content": "payments-service CPU 급증"},
+         {"role": "assistant", "content": "1) payments-service CPU 97% 2) ... 3) ..."},
+         {"role": "user", "content": "제 이름은 민수입니다"}, {"role": "assistant", "content": "민수님 안녕하세요"}]
+    assert [m["content"] for m in _chat_history(h)] == ["payments-service CPU 급증", "제 이름은 민수입니다", "민수님 안녕하세요"]
+
+
+@pytest.mark.parametrize("query, expected", [
+    ("결제 서버 응답이 너무 느려요", ["payments-service"]),          # N2 별칭 (Before: auth-service 조사)
+    ("WEB-01 장애 진단해줘", ["web-01"]),                            # N3 대소문자 (Before: auth-service 조사)
+    ("payments 서비스 CPU가 높아요", ["payments-service"]),
+    ("로그인 응답이 느려요, 원인 확인해주세요", ["auth-service"]),     # '로그인'이 '로그'(log)로 잘못 잡히지 않는다
+    ("캐시 메모리랑 로그인 둘 다 느려", ["cache-service", "auth-service"]),
+    ("billing-service 응답이 느려요", []),
+])
+def test_n2_n3_system_aliases_and_case(query, expected):
+    assert mentioned_systems(query) == expected
+
+
+class _Router:
+    def __init__(self, route):
+        self.r = route
+
+    async def route(self, query):
+        return {"route": self.r, "needs_analysis": False}, {"usd": 0.0}
+
+
+@pytest.mark.parametrize("model_route, query, expected", [
+    ("incident", "payments 서비스 CPU가 높아요", "incident"),   # N4: Before 보정이 chat으로 잘못 바꿈
+    ("chat", "web-01 상태 괜찮아?", "incident"),                # N5: Before chat → 조회 없이 '괜찮아요'
+    ("incident", "제 이름은 민수입니다", "chat"),                # P9 후속 보정은 유지
+    ("chat", "안녕, 너는 누구야?", "chat"),
+])
+def test_n4_n5_route_correction_both_ways(model_route, query, expected):
+    from types import SimpleNamespace
+
+    from agent.graph import route_node
+    out = asyncio.run(route_node({"query": query, "events": []}, SimpleNamespace(fast_llm=_Router(model_route))))
+    assert out["route"] == expected
+
+
+def test_n6_plan_ignores_model_systems_not_in_query(monkeypatch):
+    llm = OllamaFastLLM("test-model", 0.0)
+    many = [{"agent": "research", "target": s} for s in ["auth-service", "cache-service", "log-service", "web-01"]]
+    monkeypatch.setattr(llm, "_chat", fake_chat(json.dumps({"needs_analysis": False, "tasks": many})))
+    result, _ = asyncio.run(llm.plan("web-01 장애 " + "로그 " * 50, "절차"))
+    assert [t["target"] for t in result["tasks"] if t["agent"] == "research"] == ["web-01"]

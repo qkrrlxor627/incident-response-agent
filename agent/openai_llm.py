@@ -210,7 +210,10 @@ class OpenAIFastLLM(OpenAILLM):
         model_targets = [t["target"] for t in tasks if t["agent"] == "research"]
         wanted = mentioned_systems(query)   # 질문에 나온 시스템 (언급 순서)
         # 순서: 질문에 나온 순서 먼저, 그다음 모델이 추가로 고른 시스템 → P2가 '먼저 말한 시스템'을 주 시스템으로 쓴다
-        ordered = list(dict.fromkeys(wanted + model_targets)) or [DEFAULT_SYSTEM]   # 아무것도 없으면 기본 시스템 (Before와 같음)
+        # [N6 BEFORE] ordered = list(dict.fromkeys(wanted + model_targets)) or [DEFAULT_SYSTEM]
+        #    → 질문에 시스템이 있어도 모델이 덧붙인 시스템까지 조사. 긴 입력에서 6개 전부 조사(30초)
+        # [N6 AFTER] 질문에 시스템이 나오면 그것만 조사한다. 질문에 없을 때만 모델 선택을 쓴다
+        ordered = wanted or list(dict.fromkeys(model_targets)) or [DEFAULT_SYSTEM]
         # ── [P2 AFTER] 감시 대상이 아닌 시스템만 나온 질문(q08 billing-service)은 조사하지 않는다 ──
         #    Before는 기본값 auth-service(또는 모델이 고른 엉뚱한 시스템)를 대신 조사해 high-latency runbook을 붙였다
         if not wanted and unmonitored_systems(query):

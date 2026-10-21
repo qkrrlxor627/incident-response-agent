@@ -1,0 +1,24 @@
+# N1 — chat 답변이 이전 장애 보고서를 베끼는 문제: 원인 확인과 해결 방법 실험 (2026-10-21)
+
+## 1) 실제 화면에서 발생 (session.db, thread t-web-tuuj7q)
+7  user      payments-service 결제 응답이 느려지고 CPU가 치솟았어요, 원인 확인해주세요
+8  assistant 1) 모니터링 상태 확인: payments-service의 상태가 degraded로 확인되었으며, CPU 사용률은 97.0%, ...
+11 user      제 이름은 민수입니다
+12 assistant 1) payments-service의 CPU 사용률이 97.0%로 치솟고 있으며, 알림 2건 중 'CPU 91% (thresh...   ← 베낌
+
+## 2) 라우팅 문제가 아님 (같은 순서를 새 thread로 재현)
+제 이름은 민수입니다 → RouteDecided {'route': 'chat', 'corrected_from': 'incident'} | 노드 route, chat_answer
+                    → 답: "민수님, payments-service의 상태가 degraded로 확인되었으며, CPU 사용률이 90%를 넘어 …"
+
+## 3) think 설정과 무관 (같은 이력으로 OllamaFastLLM.chat 3회씩)
+think=False: 1) payments-service의 CPU 사용률이 97.0%로 치솟고 있으며 … (3/3)
+think=True : 1) payments-service의 CPU 사용률이 97.0%로 높은 수준을 보이고 있으며 … (3/3)
+→ Before 코드부터 있던 문제. 측정 q10은 항상 새 대화에서 시작해 이 순서를 시험하지 않았다.
+
+## 4) 해결 방법 실험 (qwen3:0.6b, think=false, temperature 0)
+| 방법                                   | ⑥ 제 이름은 민수입니다                     | ⑦ 제 이름이 뭐였죠? |
+| 이력을 대화 배열(messages)로 전달        | "1) 민수님의 payments-service는 CPU 97.0%…" | "민수님의 이름은 "민수"입니다." |
+| 보고서를 "(장애 진단 보고서를 전달함)"으로 | "(장애 진단 보고서를 전달함)" (베낌)        | 같음 (베낌) |
+| 보고서를 '참고' 블록으로 분리 + 무시 지시  | "민수님의 메시지입니다."                    | "민수님의 메시지입니다." |
+| **보고서를 이력에서 뺌 (채택)**           | "민수님의 문제를 해결해 드릴게요."          | "민수님입니다." |
+→ 빼는 방법만 베끼기를 없앴다. 대신 후속 질문 "그럼 지금 당장 뭐부터 해야 해?"는 문맥을 잃는다("다시 봐요.") → N8 한계.

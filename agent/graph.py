@@ -96,14 +96,34 @@ async def route_node(state: AgentState, deps: SupervisorDeps) -> dict:
     # ── [P9 후속 AFTER] route 권위 보정 — After 측정에서 발견한 회귀 ──
     #    think를 끈 0.6b 라우터가 q10 "제 이름은 민수입니다"를 incident로 분류 → 장애 파이프라인 14초 (3/3)
     #    증상 단어도 시스템 이름도 없는 질문은 코드가 chat으로 바로잡는다 (K6: 확인 가능한 판단은 코드가 내린다)
-    corrected = result["route"] == "incident" and not looks_like_incident(state["query"])
-    if corrected:
+    # [N5 BEFORE] incident → chat 한 방향만 보정 → "web-01 상태 괜찮아?"가 chat으로 가서 조회 없이 "괜찮아요"라고 지어냄
+    # corrected = result["route"] == "incident" and not looks_like_incident(state["query"])
+    # ── [N5 AFTER] 양방향 보정 ──
+    #    ① 모니터링하는 시스템이 질문에 나오면 → incident (상태는 지어내지 말고 실제로 조회해야 한다)
+    #    ② 증상 단어도 시스템 이름도 없으면 → chat (P9 후속, q10)
+    query = state["query"]
+    original = result["route"]
+    if mentioned_systems(query):
+        result = {**result, "route": "incident"}
+    elif not looks_like_incident(query):
         result = {**result, "route": "chat"}
+    corrected = result["route"] != original
     event = {"type": "RouteDecided", "route": result["route"],
-             **({"corrected_from": "incident"} if corrected else {})}
+             **({"corrected_from": original} if corrected else {})}
     return {"route": result["route"], "needs_analysis": result["needs_analysis"],
             "cost_usd": _cost(state, usage),
             "events": state.get("events", []) + [event]}
+
+
+def _chat_history(history: list[dict]) -> list[dict]:
+    """[N1 AFTER] chat 경로용 이력: 장애 진단 보고서(assistant의 '1)'로 시작하는 답변)를 뺀다.
+
+    실험(outputs/after/evidence/N1_chat_history_copy.txt): 보고서를 '(생략)'으로 바꾸면 그 문구를 베끼고,
+    대화 배열로 넘겨도 베꼈다. 빼는 것만 효과가 있었다.
+    트레이드오프: 장애 직후 "그럼 뭐부터 해?" 같은 후속 질문은 보고서 문맥을 잃는다 (N8, 한계).
+    """
+    return [m for m in history
+            if not (m.get("role") == "assistant" and m.get("content", "").lstrip().startswith("1)"))]
 
 
 @traceable(name="chat_answer_node")
@@ -114,8 +134,12 @@ async def chat_answer_node(state: AgentState, deps: SupervisorDeps) -> dict:
     때만 실제로 전송되고, /chat(ainvoke)처럼 스트리밍하지 않는 호출에서는 자동으로
     no-op이 된다."""
     writer = get_stream_writer()
+    # [N1 BEFORE] 이력을 그대로 넘김 → 0.6b 모델이 직전 장애 보고서를 그대로 이어 씀
+    #   예: 장애 질문 다음 "제 이름은 민수입니다" → "1) payments-service의 CPU 사용률이 97.0%로…" (think on/off 모두 3/3)
+    # reply, usage = await deps.fast_llm.chat(state["query"], state.get("history", []), ...)
+    # [N1 AFTER] 일반 대화에는 장애 보고서(긴 '1) 2) 3)' 답변)를 빼고 넘긴다 — 사용자 말과 짧은 대화만 남는다
     reply, usage = await deps.fast_llm.chat(
-        state["query"], state.get("history", []),
+        state["query"], _chat_history(state.get("history", [])),
         on_token=lambda piece: writer({"type": "AnswerToken", "delta": piece}))
     return {"final": reply, "last_prompt": usage.get("prompt"),
             "cost_usd": _cost(state, usage),

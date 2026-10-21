@@ -33,13 +33,42 @@ KNOWN_SYSTEMS = _load_known_systems()
 _SYSTEM_LIKE = re.compile(r"[a-z][a-z0-9]*(?:-[a-z0-9]+)*-(?:service|\d+)")
 
 
+# ── [N2 AFTER] 시스템 별칭 사전 — 시스템 이름 없이 '역할'로 말해도 알아듣는다 ──
+#    Before: "결제 서버 응답이 너무 느려요" → 이름이 없어 기본값 auth-service를 조사 (엉뚱한 시스템)
+#    긴 별칭부터 검사하고 매칭된 구간은 지운다 → "로그인"(auth)이 "로그"(log)로 다시 잡히지 않는다
+SYSTEM_ALIASES = {
+    "auth-service": ["로그인", "인증", "login", "auth"],
+    "payments-service": ["결제", "payments", "payment"],
+    "cache-service": ["캐시", "cache"],
+    "gateway-service": ["게이트웨이", "gateway"],
+    "log-service": ["로그 서버", "로그서버", "로그 서비스", "로그 수집"],
+    "web-01": ["웹 서버", "웹서버"],
+}
+
+
 def mentioned_systems(query: str) -> list[str]:
-    """질문에 나온 KNOWN_SYSTEMS를 '처음 나온 위치' 순서로 돌려준다(중복 없음).
+    """질문에 나온 시스템을 '처음 나온 위치' 순서로 돌려준다(중복 없음).
 
     예: "web-01 CPU 급증, auth-service 커넥션 풀" → ['web-01', 'auth-service']
+    [N3 AFTER] 대소문자 무시: "WEB-01" → web-01 (Before: 인식 못 해 auth-service를 조사)
+    [N2 AFTER] 별칭: "결제 서버" → payments-service
     """
-    hits = [(query.index(s), s) for s in KNOWN_SYSTEMS if s in query]
-    return [s for _, s in sorted(hits)]   # 위치(index)로 정렬 = 언급 순서
+    # [N3 BEFORE] hits = [(query.index(s), s) for s in KNOWN_SYSTEMS if s in query]
+    text = query.lower()   # [N3 AFTER] 시스템 이름은 모두 소문자다
+    hits = {}
+    for s in KNOWN_SYSTEMS:   # 1) 정식 이름 (가장 확실) — 매칭 구간은 공백으로 지워 별칭이 다시 잡지 않게 한다
+        i = text.find(s)
+        if i >= 0:
+            hits[s] = i
+            text = text.replace(s, " " * len(s))
+    pairs = sorted(((alias, s) for s, aliases in SYSTEM_ALIASES.items() for alias in aliases),
+                   key=lambda p: -len(p[0]))   # 2) 별칭 — 긴 것부터 ("로그인"을 "로그"보다 먼저)
+    for alias, s in pairs:
+        i = text.find(alias)
+        if s in KNOWN_SYSTEMS and i >= 0:
+            hits[s] = min(hits.get(s, i), i)
+            text = text.replace(alias, " " * len(alias))
+    return [s for s, _ in sorted(hits.items(), key=lambda kv: kv[1])]   # 위치로 정렬 = 언급 순서
 
 
 def unmonitored_systems(query: str) -> list[str]:
@@ -48,7 +77,7 @@ def unmonitored_systems(query: str) -> list[str]:
     P2에서 '감시 대상이 아님'을 답하는 데 쓴다. 모니터링 시스템 이름의 일부는 제외한다.
     """
     found = []
-    for m in _SYSTEM_LIKE.finditer(query):
+    for m in _SYSTEM_LIKE.finditer(query.lower()):   # [N3 AFTER] 대소문자 무시
         name = m.group(0)
         if name not in KNOWN_SYSTEMS and not any(name in s or s in name for s in KNOWN_SYSTEMS):
             found.append(name)
@@ -68,8 +97,13 @@ def research_targets(query: str) -> list[str]:
 
 
 # 장애 질문의 증상 단어 (v1 롤백 경로와 v2 route 보정이 같이 쓴다)
+# [N4 BEFORE] 증상 단어가 좁아서 "payments 서비스 CPU가 높아요"를 chat으로 잘못 보정 (P9 후속 보정의 부작용)
+# INCIDENT_PATTERN = re.compile(r"장애|진단|다운|지연|급증|저하|느려|느리|타임아웃|부족|오류|에러|원인|"
+#                               r"치솟|올라가|알림|incident|티켓")
+# [N4 AFTER] 지표 이름(cpu·메모리·디스크·응답·커넥션)과 상태 표현(높|안 돼|실패|5xx)을 더했다. 대소문자 무시
 INCIDENT_PATTERN = re.compile(r"장애|진단|다운|지연|급증|저하|느려|느리|타임아웃|부족|오류|에러|원인|"
-                              r"치솟|올라가|알림|incident|티켓")
+                              r"치솟|올라가|알림|높아|높음|안 ?돼|실패|cpu|메모리|디스크|응답|커넥션|"
+                              r"\b5\d\d\b|down|slow|error|incident|티켓", re.IGNORECASE)
 
 
 def looks_like_incident(query: str) -> bool:
