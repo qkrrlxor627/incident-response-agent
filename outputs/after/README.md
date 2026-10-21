@@ -9,6 +9,28 @@
   - **1차**(`after_run1_*`)에서 q10 라우팅 회귀를 발견했다 → 보정 → **2차**(`after_*`)가 최종이다.
   - 경위는 `outputs/final-report/09b_step8_route_regression.md`에 있다.
 
+## 0. 측정 이력 — 어느 결과가 최신인가
+
+| 순서 | 결과 파일 (`bench/results/`) | 측정 시각 | 코드 | 상태 |
+|---|---|---|---|---|
+| 1 | `baseline_*` | 10-20 14:14 | tag `baseline` (원본) | **Before 기준** |
+| 2 | `baseline_rerun1021_*` | 10-21 16:11 | 원본 | 참고용 재실행. 같은 코드도 회차마다 흔들린다는 근거(이번 회차는 q01 타임아웃 없음) |
+| 3 | `after_run1_*` | 10-21 21:25 | `1f8e51d` (1~7단계) | **폐기**: q10 라우팅 회귀 발견 → `09b` 문서 |
+| 4 | `after_*` + `after_langsmith_eval.json` | 10-21 21:33 | `83125f4` (+route 보정) | **발표 기준 After**. 화면 캡처·LangSmith judge가 이 회차다 |
+| 5 | `after_n_*` | 10-21 22:20 | N1~N6 수정 후 (`11` 문서) | **최신 코드 회귀 확인**. 4번과 같은 수준인지 확인했다 (judge는 다시 돌리지 않음) |
+
+- 아래 1~2절의 After 값은 **4번(`after_*`, 발표 기준)**이다.
+- 최신 코드(5번)와의 비교는 [`11_new_issues_N1_N8.md`](../final-report/11_new_issues_N1_N8.md)에 있다.
+
+| 지표 | Before (`baseline`) | After (`after`, 발표 기준) | 최신 (`after_n`) |
+|---|---|---|---|
+| runbook 정답률 / recall / precision | 0.739 / 0.775 / 0.87 | 1.0 / 1.0 / 1.0 | 1.0 / 1.0 / 1.0 |
+| incident 중앙값 | 36.0초 | 12.8초 | 12.5초 |
+| 최대 응답 | 300초 | 24.4초 | 24.7초 |
+| chat 중앙값 | 1.28초 | 0.26초 | 0.26초 |
+| 가상 비용 | $0.1637 | $0.1360 | $0.1368 |
+| validate 재작성 | 0 | 3 (q02) | 3 (q02) |
+
 ## 1. Before → After (미션 C4: 지연시간·비용·검색 정확도·retry)
 
 ### 정확도 (`rescore.py` 정답 세트 재채점 / LangSmith evaluate)

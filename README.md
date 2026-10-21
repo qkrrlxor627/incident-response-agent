@@ -28,15 +28,34 @@
 | 응답 대기 중 다른 요청(`/health`) 지연 | 최대 1.73초 | **0.03초** |
 | **비용** (가상 단가 × 실측 토큰) | $0.1637 | **$0.1360** (−17%) |
 | 응답 성공률 (기존 지표) | 0.97 | 1.0 |
-| 단위 테스트 | 15 passed + 1 xfail | **57 passed** |
+| 단위 테스트 | 15 passed + 1 xfail | **69 passed** |
 
-- 출처: `bench/results/{baseline,after}_*`. 비교표 전체와 다시 계산하는 명령은 [`outputs/after/README.md`](outputs/after/README.md)에 있다.
+- 출처: `bench/results/baseline_*`(Before), `after_*`(After, 발표 기준). 최신 코드로 다시 잰 `after_n_*`도 같은 수준이다(아래 '측정 이력'). 비교표 전체와 다시 계산하는 명령은 [`outputs/after/README.md`](outputs/after/README.md)에 있다.
 - 나빠진 점도 같은 문서에 기록했다: q04 judge 0.95 → 0.75, q02는 검증 재작성으로 22.9초.
 
 | Before | After |
 |---|---|
 | ![before](outputs/before/captures/S1_q05_multi_system_db_down.png) | ![after](outputs/after/captures/S1_q05_multi_system_db_down.png) |
 | web-01만 조사, **db-down** 매뉴얼(오분류) | 두 시스템 조사, **high-latency**, "검수 통과 (근거 확인됨)" |
+
+## 측정 이력 — 어느 결과가 최신인가
+
+| 순서 | 결과 파일 (`bench/results/`) | 측정 시각 | 코드 | 상태 |
+|---|---|---|---|---|
+| 1 | `baseline_*` | 10-20 14:14 | tag `baseline` (원본) | **Before 기준** |
+| 2 | `baseline_rerun1021_*` | 10-21 16:11 | 원본 | 참고용 재실행. 같은 코드도 회차마다 흔들린다는 근거(이번 회차는 q01 타임아웃 없음) |
+| 3 | `after_run1_*` | 10-21 21:25 | `1f8e51d` (1~7단계) | **폐기**: q10 라우팅 회귀 발견 → `09b` 문서 |
+| 4 | `after_*` + `after_langsmith_eval.json` | 10-21 21:33 | `83125f4` (+route 보정) | **발표 기준 After**. 화면 캡처·LangSmith judge가 이 회차다 |
+| 5 | `after_n_*` | 10-21 22:20 | N1~N6 수정 후 (`11` 문서) | **최신 코드 회귀 확인**. 4번과 같은 수준인지 확인했다 (judge는 다시 돌리지 않음) |
+
+| 지표 | Before (`baseline`) | After (`after`, 발표 기준) | 최신 (`after_n`) |
+|---|---|---|---|
+| runbook 정답률 / recall / precision | 0.739 / 0.775 / 0.87 | 1.0 / 1.0 / 1.0 | 1.0 / 1.0 / 1.0 |
+| incident 중앙값 | 36.0초 | 12.8초 | 12.5초 |
+| 최대 응답 | 300초 | 24.4초 | 24.7초 |
+| chat 중앙값 | 1.28초 | 0.26초 | 0.26초 |
+| 가상 비용 | $0.1637 | $0.1360 | $0.1368 |
+| validate 재작성 | 0 | 3 (q02) | 3 (q02) |
 
 ## 무엇을 고쳤나 (고친 순서)
 
@@ -50,6 +69,7 @@
 | 6 | 검증이 형식만 봄 | `len >= 30 and "1)" in draft` | 규칙 3개 + LLM judge(0.6b와 8b를 비교 실험한 뒤 8b 채택), 재작성 1회 | [08](outputs/final-report/08_step6_P11.md) |
 | 7 | 동기 세션 저장, v1 롤백이 동작하지 않음 | 동기 sqlite, fake 응답 문구에 의존 | `to_thread` 비동기 저장소 + 팩토리, v1도 질문으로 장애 판단 | [09](outputs/final-report/09_step7_E15_P10.md) |
 | 8 | **After 측정이 찾은 회귀** | think를 끈 라우터가 자기소개를 장애로 분류(q10 14초) | route 권위 보정 → 재측정 | [09b](outputs/final-report/09b_step8_route_regression.md) |
+| 9 | **실사용·탐색 스윕이 찾은 문제 N1~N6** | 장애 후 잡담에 보고서를 베낌, "결제 서버"·"WEB-01" 미인식, route 보정 부작용, 상태 질문에 지어낸 답, 질문에 없는 시스템 조사 | 이력 필터, 별칭·대소문자, 양방향 route 보정, 질문 시스템만 조사 | [11](outputs/final-report/11_new_issues_N1_N8.md) |
 
 각 단계는 **커밋 1개 + 문서 1개**다. 문서는 7단계 문제 해결 형식(정의 → 원인 → 대안 비교 → 실행 → 검증 → 재발 방지)으로 썼고, 끝에 "직접 확인하는 방법"이 있다.
 
@@ -113,7 +133,7 @@ bash sh/run_frontend.sh          # 터미널 3 — 채팅 화면 http://localhos
 ## 테스트와 측정
 
 ```bash
-./.venv/bin/python3 -m pytest tests -q                              # 57 passed
+./.venv/bin/python3 -m pytest tests -q                              # 69 passed
 ./.venv/bin/python3 bench/run_baseline.py --repeat 3 --tag after     # 성능 측정 (서버 필요, 약 6분)
 ./.venv/bin/python3 bench/rescore.py --tag after                     # 정답 세트 재채점 (서버 불필요)
 set -a; source .env; set +a
@@ -132,7 +152,7 @@ cd bench && ../.venv/bin/python3 eval_langsmith.py --prefix after    # LangSmith
 | `bench/` | 측정 스크립트, 정답 세트, 결과(`results/baseline_*`, `after_*`) |
 | `outputs/before/` | Before 증거: 화면, 터미널, 코드 캡처, 원본 텍스트 |
 | `outputs/after/` | After 증거(같은 파일명) + **Before/After 비교표** |
-| `outputs/final-report/` | 문제 인식(01), 측정 추적(02), 단계별 기록(03~09b), **최종 발표(10)** |
+| `outputs/final-report/` | 문제 인식(01), 측정 추적(02), 단계별 기록(03~09b), **최종 발표(10)**, 새로 발견된 문제(11) |
 | `doc/workLog.md` | 날짜별 작업 기록 |
 | `doc/guide.md` | Before/After 측정과 캡처를 직접 재현하는 명령 |
 | `doc/README.md` | 원래 실습 프로젝트 설명 (Wave 1~15) |
@@ -146,4 +166,5 @@ git 태그:
 - 평가 표본이 질문 10개 × 3회라 작다. 정답 세트에 맞춘 개선이라 **과적합 위험**이 있다.
 - 시스템 추출, 장애 키워드, route 보정이 모두 키워드 규칙이다. 이름 없는 표현("결제 서버가 안 돼요")은 놓친다.
 - 8b judge가 요청마다 약 3초를 쓴다. 응답시간의 60~70%는 아직 8b 답변 생성이다.
-- 하지 않은 것: LangGraph 공식 checkpointer 전환, 스트림 POST 전환, 시스템 별칭 사전.
+- 장애 직후 후속 질문("그럼 뭐부터 해?")은 문맥을 잃는다(N8). 동시 요청은 Ollama가 순서대로 처리해 느리다(N7).
+- 하지 않은 것: LangGraph 공식 checkpointer 전환, 스트림 POST 전환.

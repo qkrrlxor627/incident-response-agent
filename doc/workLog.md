@@ -394,6 +394,27 @@ fake 백엔드와 임시 session DB로 `/chat/stream`을 직접 호출해 확인
 - 코드 위치 색인: `outputs/final-report/00_code_index.md`
 - 코드에서 `[Px BEFORE]`(주석 처리한 원래 코드)와 `[Px AFTER]`(고친 코드)로 검색하면 바뀐 곳이 모두 나온다.
 
+## 2026-10-21 (밤) — 새로 발견된 문제 N1~N8
+
+- **계기**: 화면에서 "장애 질문 → 제 이름은 민수입니다"를 보내자 이전 장애 보고서가 다시 나왔다. 측정 질문 10개는 매번 새 대화라 이 순서를 시험하지 않았다.
+- **탐색 스윕**: `outputs/after/scripts/explore_sweep.py`로 12개 상황을 실제 서버에 보냈다. 결과는 `outputs/after/evidence/N_sweep_before_fix.txt`.
+- 고친 것:
+  - N1 chat 이력에서 장애 보고서 제외
+  - N2 별칭(결제 → payments)
+  - N3 대소문자
+  - N4 증상 단어 확대 (P9 후속 보정의 부작용)
+  - N5 route 양방향 보정 ("web-01 상태 괜찮아?"에 지어낸 답)
+  - N6 질문에 없는 시스템은 조사하지 않음
+- 남긴 한계:
+  - N7 동시 요청 (Ollama가 순서대로 처리)
+  - N8 장애 직후 후속 질문의 문맥 상실 (N1 수정의 대가)
+- 검증:
+  - pytest 57 → **69 passed**
+  - 스윕 결과: `N_sweep_after_fix.txt`
+  - 기존 10개 질문 회귀 확인 `bench/results/after_n_*`: 정답률 1.0, incident 중앙값 12.5초
+- 문서: `outputs/final-report/11_new_issues_N1_N8.md`
+- 측정 이력(무엇이 최신인지)은 README의 "측정 이력" 표에 정리했다.
+
 ## 컴퓨터를 다시 켰을 때 (재시작 절차)
 
 `.venv`, Ollama 모델, `.env`는 디스크에 남아 있다. 그래서 다시 설치할 필요는 없고, **프로세스만 다시 띄우면 된다.**

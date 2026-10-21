@@ -25,33 +25,33 @@
 | #14 | BEFORE | `agent/openai_llm.py:32` | [#14 BEFORE] graph.py·ollama_llm.py·openai_llm.py에 똑같이 복사돼 있던 시스템 추출 로직 ── |
 | #14 | AFTER | `agent/openai_llm.py:64` | [#14 AFTER] 공통 모듈 agent/systems.py 하나로 모았다 (K14 모듈화) ── |
 | P2 | AFTER | `agent/fake_llm.py:123` | notes = [c["data"] for c in collected if c["source"] == "note"]   # [P2 AFTER] 이상 없음/감시 대상 아님 |
-| P2 | BEFORE | `agent/graph.py:267` | [P2 BEFORE] 모든 시스템의 알림을 한 문자열로 합친 뒤 규칙을 위에서부터 검사 ── |
-| P2 | AFTER | `agent/graph.py:279` | [P2 AFTER] 시스템을 '하나씩', 질문에 나온 순서대로 본다 (K8 근거 기반 분류) ── |
-| P2 | AFTER | `agent/graph.py:326` | [P2 AFTER] 분류 근거가 없으면(None) runbook gap task를 만들지 않고 그대로 진행 ── |
-| P2 | AFTER | `agent/ollama_llm.py:280` | [P2 AFTER] 감시 대상이 아닌 시스템만 나온 질문(q08 billing-service)은 조사하지 않는다 ── |
-| P2 | AFTER | `agent/ollama_llm.py:333` | elif c["source"] == "note":   # [P2 AFTER] runbook을 붙이지 않은 이유 (graph._no_runbook_note) |
-| P2 | AFTER | `agent/openai_llm.py:214` | [P2 AFTER] 감시 대상이 아닌 시스템만 나온 질문(q08 billing-service)은 조사하지 않는다 ── |
-| P2 | AFTER | `agent/openai_llm.py:277` | elif c["source"] == "note":   # [P2 AFTER] runbook을 붙이지 않은 이유 (graph._no_runbook_note) |
-| P3 | BEFORE | `agent/graph.py:152` | [P3 BEFORE] 모델의 needs_analysis 판단만 믿음 → 0.6b 모델은 거의 항상 true (incident 8종 중 7종에서 분석 실행) ── |
-| P3 | AFTER | `agent/graph.py:158` | [P3 AFTER] 이중 게이트 (K7 권위 게이트) ── |
+| P2 | BEFORE | `agent/graph.py:291` | [P2 BEFORE] 모든 시스템의 알림을 한 문자열로 합친 뒤 규칙을 위에서부터 검사 ── |
+| P2 | AFTER | `agent/graph.py:303` | [P2 AFTER] 시스템을 '하나씩', 질문에 나온 순서대로 본다 (K8 근거 기반 분류) ── |
+| P2 | AFTER | `agent/graph.py:350` | [P2 AFTER] 분류 근거가 없으면(None) runbook gap task를 만들지 않고 그대로 진행 ── |
+| P2 | AFTER | `agent/ollama_llm.py:283` | [P2 AFTER] 감시 대상이 아닌 시스템만 나온 질문(q08 billing-service)은 조사하지 않는다 ── |
+| P2 | AFTER | `agent/ollama_llm.py:336` | elif c["source"] == "note":   # [P2 AFTER] runbook을 붙이지 않은 이유 (graph._no_runbook_note) |
+| P2 | AFTER | `agent/openai_llm.py:217` | [P2 AFTER] 감시 대상이 아닌 시스템만 나온 질문(q08 billing-service)은 조사하지 않는다 ── |
+| P2 | AFTER | `agent/openai_llm.py:280` | elif c["source"] == "note":   # [P2 AFTER] runbook을 붙이지 않은 이유 (graph._no_runbook_note) |
+| P3 | BEFORE | `agent/graph.py:176` | [P3 BEFORE] 모델의 needs_analysis 판단만 믿음 → 0.6b 모델은 거의 항상 true (incident 8종 중 7종에서 분석 실행) ── |
+| P3 | AFTER | `agent/graph.py:182` | [P3 AFTER] 이중 게이트 (K7 권위 게이트) ── |
 | P4 | AFTER | `agent/fake_llm.py:35` | [P4 AFTER] 실모델 백엔드와 인터페이스를 맞추려고 route·plan·analyze를 async def로 바꿨다 |
-| P4 | BEFORE | `agent/graph.py:137` | [P4 BEFORE] result, usage = deps.fast_llm.plan(state["query"], procedure) |
-| P4 | AFTER | `agent/graph.py:138` | result, usage = await deps.fast_llm.plan(state["query"], procedure)   # [P4 AFTER] |
-| P4 | BEFORE | `agent/graph.py:352` | [P4 BEFORE] summary, usage = deps.fast_llm.analyze(state.get("collected", [])) |
-| P4 | AFTER | `agent/graph.py:354` | summary, usage = await deps.fast_llm.analyze(state.get("collected", []))   # [P4 AFTER] |
+| P4 | BEFORE | `agent/graph.py:161` | [P4 BEFORE] result, usage = deps.fast_llm.plan(state["query"], procedure) |
+| P4 | AFTER | `agent/graph.py:162` | result, usage = await deps.fast_llm.plan(state["query"], procedure)   # [P4 AFTER] |
+| P4 | BEFORE | `agent/graph.py:376` | [P4 BEFORE] summary, usage = deps.fast_llm.analyze(state.get("collected", [])) |
+| P4 | AFTER | `agent/graph.py:378` | summary, usage = await deps.fast_llm.analyze(state.get("collected", []))   # [P4 AFTER] |
 | P4 | BEFORE | `agent/graph.py:94` | [P4 BEFORE] result, usage = deps.fast_llm.route(state["query"])   ← 동기 호출: 이벤트 루프 정지 |
 | P4 | AFTER | `agent/graph.py:95` | result, usage = await deps.fast_llm.route(state["query"])   # [P4 AFTER] await |
 | P4 | BEFORE | `agent/ollama_llm.py:117` | [P4 BEFORE] async 노드 안에서 '동기' HTTP 호출 → 응답을 기다리는 동안 이벤트 루프 전체가 멈춤 ── |
 | P4 | AFTER | `agent/ollama_llm.py:122` | [P4 AFTER] httpx.AsyncClient + await → 기다리는 동안 다른 요청을 처리한다 (K12 블로킹 금지) ── |
 | P4 | AFTER | `agent/ollama_llm.py:205` | async def route(self, query: str) -> tuple[dict, dict]:   # [P4 AFTER] def → async def |
 | P4 | AFTER | `agent/ollama_llm.py:224` | async def plan(self, query: str, procedure_prompt: str) -> tuple[dict, dict]:   # [P4 AFTER] |
-| P4 | AFTER | `agent/ollama_llm.py:293` | async def analyze(self, collected: list[dict]) -> tuple[str, dict]:   # [P4 AFTER] |
+| P4 | AFTER | `agent/ollama_llm.py:296` | async def analyze(self, collected: list[dict]) -> tuple[str, dict]:   # [P4 AFTER] |
 | P4 | BEFORE | `agent/openai_llm.py:103` | [P4 BEFORE] resp = httpx.post(OPENAI_URL, json=payload, headers=headers, timeout=120.0) |
 | P4 | AFTER | `agent/openai_llm.py:104` | async with httpx.AsyncClient(timeout=120.0) as client:   # [P4 AFTER] |
 | P4 | AFTER | `agent/openai_llm.py:87` | [P4 AFTER] ollama_llm.py와 같은 이유로 비동기로 바꿨다 (Before: httpx.post 동기 호출, timeout=120.0) |
 | P5·P6 | AFTER | `agent/errors.py:1` | """[P5·P6 AFTER] 에러 분류 공통 모듈. |
-| P5 | BEFORE | `agent/graph.py:198` | data = await deps.mcp.read_resource(uri, server=runbook_server)   ← [P5 BEFORE] runbook은 재시도 없음 |
-| P5 | AFTER | `agent/graph.py:215` | [P5 AFTER] runbook(Resource) 읽기도 재시도한다 |
+| P5 | BEFORE | `agent/graph.py:222` | data = await deps.mcp.read_resource(uri, server=runbook_server)   ← [P5 BEFORE] runbook은 재시도 없음 |
+| P5 | AFTER | `agent/graph.py:239` | [P5 AFTER] runbook(Resource) 읽기도 재시도한다 |
 | P5 | BEFORE | `agent/mcp_client.py:107` | [P5 BEFORE] async with self._lock: |
 | P5 | BEFORE | `agent/mcp_client.py:108` | [P5 BEFORE]     result = await self.sessions[server].call_tool(name, arguments)   ← 시간 제한 없음 |
 | P5 | AFTER | `agent/mcp_client.py:115` | result = await self._call("list_resource_templates",   # [P5 AFTER] 시간 제한 |
@@ -62,15 +62,15 @@
 | P5 | AFTER | `agent/mcp_client.py:32` | [P5 AFTER] MCP 호출 1건의 시간 제한 ── |
 | P5 | AFTER | `agent/mcp_client.py:83` | """[P5 AFTER] 모든 MCP 요청이 지나가는 관문: 시간 제한 + 예외를 '재시도 가능 여부'로 번역. |
 | P5 | BEFORE | `agent/retry.py:21` | [P5 BEFORE] async def with_retry(fn, *args, retries: int = 3, base_delay: float = 0.3, **kwargs): |
+| P5 | BEFORE | `agent/retry.py:3` | [P5 BEFORE] asyncio.TimeoutError(일시적)만 재시도하고, 그 외(ValueError 등 영구적)는 즉시 전파한다. |
 | P5 | BEFORE | `agent/retry.py:30` | [P5 BEFORE] except asyncio.TimeoutError: |
 | P5 | AFTER | `agent/retry.py:31` | except Exception as exc:   # [P5 AFTER] 일시적인 에러인지는 _is_transient가 판단 |
 | P5 | BEFORE | `agent/retry.py:34` | [P5 BEFORE] delay = base_delay * (3 ** (attempt - 1)) |
-| P5 | BEFORE | `agent/retry.py:3` | [P5 BEFORE] asyncio.TimeoutError(일시적)만 재시도하고, 그 외(ValueError 등 영구적)는 즉시 전파한다. |
 | P5 | AFTER | `agent/retry.py:5` | [P5 AFTER] 재시도 대상 = TimeoutError + recoverable=True인 ToolError. |
-| P6 | BEFORE | `agent/graph.py:195` | [P6 BEFORE] 예외 격리 없이 gather → task 하나가 실패하면 gather 전체가 예외 → 요청 전체 실패 ── |
-| P6 | AFTER | `agent/graph.py:201` | [P6 AFTER] 코루틴마다 try/except로 격리 → 성공한 것만 모아 '부분 응답'을 만든다 (K10·K12) ── |
-| P6 | AFTER | `agent/graph.py:232` | if "error" in r:   # [P6 AFTER] 실패한 task: 상태 failed + TaskFailed 이벤트, 수집 결과에는 넣지 않는다 |
-| P6 | AFTER | `agent/graph.py:308` | [P6 AFTER] 조회가 실패해서 데이터가 없는 것을 '정상'으로 착각하지 않는다 |
+| P6 | BEFORE | `agent/graph.py:219` | [P6 BEFORE] 예외 격리 없이 gather → task 하나가 실패하면 gather 전체가 예외 → 요청 전체 실패 ── |
+| P6 | AFTER | `agent/graph.py:225` | [P6 AFTER] 코루틴마다 try/except로 격리 → 성공한 것만 모아 '부분 응답'을 만든다 (K10·K12) ── |
+| P6 | AFTER | `agent/graph.py:256` | if "error" in r:   # [P6 AFTER] 실패한 task: 상태 failed + TaskFailed 이벤트, 수집 결과에는 넣지 않는다 |
+| P6 | AFTER | `agent/graph.py:332` | [P6 AFTER] 조회가 실패해서 데이터가 없는 것을 '정상'으로 착각하지 않는다 |
 | P6 | AFTER | `agent/graph.py:61` | RESEARCH_CONCURRENCY = 4   # [P6 AFTER] research 동시 실행 상한 |
 | P6 | AFTER | `agent/ollama_llm.py:21` | [P6 AFTER] 환경변수로 바꿀 수 있게 했다 — 장애 재현 때 중간 프록시를 끼워 "답변 도중 끊김"을 만들기 위함 |
 | P6 | BEFORE | `server.py:171` | [P6 BEFORE] 예외가 나면 FastAPI 기본 500 "Internal Server Error" (원인·재시도 가능 여부 없음) |
@@ -97,9 +97,9 @@
 | P7 | AFTER | `server.py:253` | [P7 AFTER] SSE 헤더: 프록시(nginx 등)·브라우저가 버퍼링/캐시하지 않고 이벤트를 즉시 흘려보내게 한다 |
 | P7 | BEFORE | `server.py:42` | [P7 BEFORE] 길이·공백 검사가 없음 → 빈 메시지("")도 200 OK로 받아 LLM까지 호출했다 (S7) ── |
 | P7 | AFTER | `server.py:46` | [P7 AFTER] 입력 계약을 모델에 명시한다 (K2 Pydantic 검증) — 위반하면 FastAPI가 422를 돌려준다 ── |
-| P9 | AFTER | `agent/graph.py:482` | """[P9 AFTER] 노드 실행 시간을 재서 state['timings']에 누적하고, JSON 한 줄로 로그를 남긴다. |
-| P9 | BEFORE | `agent/graph.py:501` | [P9 BEFORE] node = lambda fn: partial(fn, deps=deps)   # Wave 13 — 명시적 의존성 주입 |
-| P9 | AFTER | `agent/graph.py:502` | [P9 AFTER] 의존성 주입은 그대로 두고, 바깥에 시간 측정 래퍼(_timed)를 씌운다 |
+| P9 | AFTER | `agent/graph.py:506` | """[P9 AFTER] 노드 실행 시간을 재서 state['timings']에 누적하고, JSON 한 줄로 로그를 남긴다. |
+| P9 | BEFORE | `agent/graph.py:525` | [P9 BEFORE] node = lambda fn: partial(fn, deps=deps)   # Wave 13 — 명시적 의존성 주입 |
+| P9 | AFTER | `agent/graph.py:526` | [P9 AFTER] 의존성 주입은 그대로 두고, 바깥에 시간 측정 래퍼(_timed)를 씌운다 |
 | P9 | AFTER | `agent/graph.py:62` | log = logging.getLogger("agent.graph")   # [P9 AFTER] JSON 한 줄 로그 (server.py가 INFO로 출력) |
 | P9 | AFTER | `agent/graph.py:84` | timings: dict   # [P9 AFTER] 노드별 소요 시간(ms) — 병목 위치를 응답 metadata에서 바로 본다 |
 | P9 | AFTER | `agent/ollama_llm.py:130` | "think": OLLAMA_THINK,            # [P9 AFTER] 숨은 사고 토큰 끔 |
@@ -109,7 +109,7 @@
 | P9 | AFTER | `agent/ollama_llm.py:162` | async with httpx.AsyncClient(timeout=timeout) as client:   # [P9 AFTER] 호출한 단계의 timeout |
 | P9 | AFTER | `agent/ollama_llm.py:24` | [P9 AFTER] 단계별 시간 제한 (Before: 모든 호출이 timeout=300.0 하나) ── |
 | P9 | AFTER | `agent/ollama_llm.py:29` | [P9 AFTER] qwen3의 '생각(thinking)' 토큰을 끈다 ── |
-| P9 | AFTER | `agent/ollama_llm.py:338` | return await self._chat_stream(system, user, on_token=on_token, timeout=WRITE_TIMEOUT)   # [P9 AFTER] write만 1 |
+| P9 | AFTER | `agent/ollama_llm.py:341` | return await self._chat_stream(system, user, on_token=on_token, timeout=WRITE_TIMEOUT)   # [P9 AFTER] write만 1 |
 | P9 | AFTER | `server.py:146` | "timings_ms": result.get("timings", {}),   # [P9 AFTER] 노드별 소요 시간 — 어디가 느린지 응답에서 바로 본다 |
 | P9 | BEFORE | `server.py:238` | [P9 BEFORE] ev = {**ev, "node": node_name} |
 | P9 | AFTER | `server.py:239` | ev = {**ev, "node": node_name,   # [P9 AFTER] 이 노드가 걸린 시간(누적 ms)도 같이 보낸다 |
@@ -121,8 +121,8 @@
 | P10 | BEFORE | `agent/supervisor_v1.py:54` | [P10 BEFORE] "retry_count": next((e.get("retries", 0) for e in events if e["type"] == "TaskCompleted"), 0)} |
 | P10 | BEFORE | `agent/supervisor_v1.py:7` | [P10 BEFORE] 장애 여부를 'fake LLM의 응답 문구'("도와드릴까요")로 판단했다. |
 | P11 | AFTER | `agent/fake_llm.py:25` | """[P11 AFTER] 결정론 judge — 답변에 수집된 시스템 이름이 모두 있으면 grounded.""" |
-| P11 | BEFORE | `agent/graph.py:385` | [P11 BEFORE] 형식만 검사: 30자 이상 + "1)" 포함이면 합격, 3번째는 무조건 통과 ── |
-| P11 | AFTER | `agent/graph.py:397` | [P11 AFTER] 규칙 검사(코드) + LLM-as-a-Judge(모델) 혼합, 재작성은 1회까지 (K9) ── |
+| P11 | BEFORE | `agent/graph.py:409` | [P11 BEFORE] 형식만 검사: 30자 이상 + "1)" 포함이면 합격, 3번째는 무조건 통과 ── |
+| P11 | AFTER | `agent/graph.py:421` | [P11 AFTER] 규칙 검사(코드) + LLM-as-a-Judge(모델) 혼합, 재작성은 1회까지 (K9) ── |
 | P11 | AFTER | `agent/ollama_llm.py:104` | JUDGE_SCHEMA = {   # [P11 AFTER] judge 출력 형식 |
 | P11 | AFTER | `agent/ollama_llm.py:183` | [P11 AFTER] LLM-as-a-Judge: 답변이 '수집된 사실'에 근거하는지 판정 (K9) ── |
 | P11 | AFTER | `agent/openai_llm.py:117` | """[P11 AFTER] ollama_llm.OllamaLLM.judge와 같은 역할 (JSON 모드).""" |
@@ -133,8 +133,8 @@
 | E15 | AFTER | `agent/session_store.py:35` | [E15 AFTER] thread_id로 찾는 쿼리(load)를 위한 인덱스 |
 | E15 | AFTER | `agent/session_store.py:57` | [E15 AFTER] async 인터페이스: 이벤트 루프를 막지 않는다 ── |
 | E15 | BEFORE | `agent/session_store.py:58` | [E15 BEFORE] def load(self, thread_id: str) -> list[dict]: rows = self.conn.execute(...) |
-| E15 | BEFORE | `agent/session_store.py:62` | [E15 BEFORE] def append(self, thread_id, role, content): self.conn.execute(...); self.conn.commit() |
 | E15 | BEFORE | `agent/session_store.py:6` | [E15 BEFORE] async 서버(FastAPI)에서 동기 sqlite3 호출을 그대로 했다. |
+| E15 | BEFORE | `agent/session_store.py:62` | [E15 BEFORE] def append(self, thread_id, role, content): self.conn.execute(...); self.conn.commit() |
 | E15 | AFTER | `agent/session_store.py:71` | """[E15 AFTER] 저장소 팩토리. SESSION_DB 환경변수로 파일 위치를 바꿀 수 있다 (테스트·스모크용).""" |
 | E15 | AFTER | `server.py:156` | await deps.session_store.append(thread_id, "user", message)   # [E15 AFTER] await |
 | E15 | AFTER | `server.py:164` | await deps.session_store.append(thread_id, "assistant", result["final"])   # [E15 AFTER] await |
@@ -143,3 +143,20 @@
 | E15 | AFTER | `server.py:250` | await deps.session_store.append(thread_id, "assistant", final)   # [E15 AFTER] await |
 | E15 | BEFORE | `server.py:97` | [E15 BEFORE] session_store=SqliteSessionStore(),   ← 동기 저장소 |
 | E15 | AFTER | `server.py:98` | session_store=create_session_store(),   # [E15 AFTER] 비동기 저장소를 팩토리로 주입 |
+| N1 | AFTER | `agent/graph.py:119` | """[N1 AFTER] chat 경로용 이력: 장애 진단 보고서(assistant의 '1)'로 시작하는 답변)를 뺀다. |
+| N1 | BEFORE | `agent/graph.py:137` | [N1 BEFORE] 이력을 그대로 넘김 → 0.6b 모델이 직전 장애 보고서를 그대로 이어 씀 |
+| N1 | AFTER | `agent/graph.py:140` | [N1 AFTER] 일반 대화에는 장애 보고서(긴 '1) 2) 3)' 답변)를 빼고 넘긴다 — 사용자 말과 짧은 대화만 남는다 |
+| N2 | AFTER | `agent/systems.py:36` | [N2 AFTER] 시스템 별칭 사전 — 시스템 이름 없이 '역할'로 말해도 알아듣는다 ── |
+| N2 | AFTER | `agent/systems.py:54` | [N2 AFTER] 별칭: "결제 서버" → payments-service |
+| N3 | AFTER | `agent/systems.py:53` | [N3 AFTER] 대소문자 무시: "WEB-01" → web-01 (Before: 인식 못 해 auth-service를 조사) |
+| N3 | BEFORE | `agent/systems.py:56` | [N3 BEFORE] hits = [(query.index(s), s) for s in KNOWN_SYSTEMS if s in query] |
+| N3 | AFTER | `agent/systems.py:57` | text = query.lower()   # [N3 AFTER] 시스템 이름은 모두 소문자다 |
+| N3 | AFTER | `agent/systems.py:80` | for m in _SYSTEM_LIKE.finditer(query.lower()):   # [N3 AFTER] 대소문자 무시 |
+| N4 | BEFORE | `agent/systems.py:100` | [N4 BEFORE] 증상 단어가 좁아서 "payments 서비스 CPU가 높아요"를 chat으로 잘못 보정 (P9 후속 보정의 부작용) |
+| N4 | AFTER | `agent/systems.py:103` | [N4 AFTER] 지표 이름(cpu·메모리·디스크·응답·커넥션)과 상태 표현(높\|안 돼\|실패\|5xx)을 더했다. 대소문자 무시 |
+| N5 | AFTER | `agent/graph.py:101` | [N5 AFTER] 양방향 보정 ── |
+| N5 | BEFORE | `agent/graph.py:99` | [N5 BEFORE] incident → chat 한 방향만 보정 → "web-01 상태 괜찮아?"가 chat으로 가서 조회 없이 "괜찮아요"라고 지어냄 |
+| N6 | BEFORE | `agent/ollama_llm.py:279` | [N6 BEFORE] ordered = list(dict.fromkeys(wanted + model_targets)) or [DEFAULT_SYSTEM] |
+| N6 | AFTER | `agent/ollama_llm.py:281` | [N6 AFTER] 질문에 시스템이 나오면 그것만 조사한다. 질문에 없을 때만 모델 선택을 쓴다 |
+| N6 | BEFORE | `agent/openai_llm.py:213` | [N6 BEFORE] ordered = list(dict.fromkeys(wanted + model_targets)) or [DEFAULT_SYSTEM] |
+| N6 | AFTER | `agent/openai_llm.py:215` | [N6 AFTER] 질문에 시스템이 나오면 그것만 조사한다. 질문에 없을 때만 모델 선택을 쓴다 |
