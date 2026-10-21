@@ -1,0 +1,9 @@
+# N9 — OpenAI After 1차: gpt-4o judge가 runbook에 있는 조치를 근거 없음으로 오반려 (bench/results/openai_after_run1_raw.jsonl)
+q01 rep 1 시도 1 불합격 | 사실 불일치: The response suggests adding an instance to the autoscaling group and performing profiling based on CPU usage nearing 90%, but the collected facts do not mention autoscaling or profiling as pa
+q01 rep 1 시도 2 합격 | 
+q01 rep 2 시도 1 불합격 | 사실 불일치: The response suggests adding an instance to the autoscaling group and performing profiling and optimization, but these actions are not mentioned in the collected facts. The collected facts onl
+q01 rep 2 시도 2 합격 | 
+q04 rep 3 시도 1 불합격 | 사실 불일치: The response includes suggestions such as checking for DNS resolution failures, firewall/security group changes, and load balancer health check failures, which are not mentioned in the collect
+q04 rep 3 시도 2 합격 | 
+q07 rep 1 시도 1 불합격 | 사실 불일치: The response suggests increasing the connection pool size or setting timeouts based on the connection pool usage exceeding 90%, but the collected facts do not provide specific guidance from th
+q07 rep 1 시도 2 합격(재작성 상한 도달 — 경고와 함께 통과) | 사실 불일치: The response suggests specific actions such as increasing the connection pool size and setting timeouts, as well as using cache layers or read replicas, which are not mentioned in the collecte

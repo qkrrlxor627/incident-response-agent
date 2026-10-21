@@ -1,0 +1,39 @@
+run_meta: {"tag": "openai_before", "started_at": "2026-10-21T22:33:07+09:00", "llm_backend": "openai", "fast_llm": "openai:gpt-4o-mini", "quality_llm": "openai:gpt-4o", "supervisor_version": "v2", "instance_id": 4494240592, "repeat": 3}
+warmup: {'status': 200, 'ms': 5568, 'error': None, 'retry_count': 1}
+q01 r1 t1: 200 7174ms route=incident type=cpu-spike runbook=cpu-spike ok=True
+q01 r2 t1: 200 7071ms route=incident type=cpu-spike runbook=cpu-spike ok=True
+q01 r3 t1: 200 6930ms route=incident type=cpu-spike runbook=cpu-spike ok=True
+q02 r1 t1: 200 5199ms route=incident type=memory-leak runbook=memory-leak ok=True
+q02 r2 t1: 200 4772ms route=incident type=memory-leak runbook=memory-leak ok=True
+q02 r3 t1: 200 5028ms route=incident type=memory-leak runbook=memory-leak ok=True
+q03 r1 t1: 200 5019ms route=incident type=disk-full runbook=disk-full ok=True
+q03 r2 t1: 200 5294ms route=incident type=disk-full runbook=disk-full ok=True
+q03 r3 t1: 200 4552ms route=incident type=disk-full runbook=disk-full ok=True
+q04 r1 t1: 200 5513ms route=incident type=cpu-spike runbook=cpu-spike ok=True
+q04 r2 t1: 200 6616ms route=incident type=high-latency runbook=high-latency ok=True
+q04 r3 t1: 200 5279ms route=incident type=cpu-spike runbook=cpu-spike ok=True
+q05 r1 t1: 200 5191ms route=incident type=high-latency runbook=high-latency ok=True
+q05 r2 t1: 200 5220ms route=incident type=high-latency runbook=high-latency ok=True
+q05 r3 t1: 200 5404ms route=incident type=high-latency runbook=high-latency ok=True
+q06 r1 t1: 200 6533ms route=incident type=cpu-spike runbook=cpu-spike ok=True
+q06 r2 t1: 200 6873ms route=incident type=cpu-spike runbook=cpu-spike ok=True
+q06 r3 t1: 200 6189ms route=incident type=cpu-spike runbook=cpu-spike ok=True
+q07 r1 t1: 200 5316ms route=incident type=high-latency runbook=high-latency ok=True
+q07 r2 t1: 200 6058ms route=incident type=high-latency runbook=high-latency ok=True
+q07 r3 t1: 200 4928ms route=incident type=high-latency runbook=high-latency ok=True
+q08 r1 t1: 200 5222ms route=incident type=high-latency runbook=high-latency ok=True
+q08 r2 t1: 200 4400ms route=incident type=high-latency runbook=high-latency ok=True
+q08 r3 t1: 200 4671ms route=incident type=high-latency runbook=high-latency ok=True
+q09 r1 t1: 200 1912ms route=chat type=None runbook=None ok=True
+q09 r2 t1: 200 2337ms route=chat type=None runbook=None ok=True
+q09 r3 t1: 200 1993ms route=chat type=None runbook=None ok=True
+q10 r1 t1: 200 1943ms route=chat type=None runbook=None ok=True
+q10 r1 t2: 200 1437ms route=chat type=None runbook=None ok=True
+q10 r2 t1: 200 1909ms route=chat type=None runbook=None ok=True
+q10 r2 t2: 200 1634ms route=chat type=None runbook=None ok=True
+q10 r3 t1: 200 1763ms route=chat type=None runbook=None ok=True
+q10 r3 t2: 200 1926ms route=chat type=None runbook=None ok=True
+
+완료: 호출 33건, 평균 4585ms, 중앙값 5191ms, 성공률 1.00
+저장: /Users/qkrrlxor627/subject/1020/all_total_vue_student/bench/results/openai_before_raw.jsonl
+      /Users/qkrrlxor627/subject/1020/all_total_vue_student/bench/results/openai_before_summary.csv

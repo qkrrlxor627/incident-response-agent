@@ -1,0 +1,11 @@
+query_id,runs,success_rate,ms_median,ms_p95,route,incident_type,runbook,monitored_systems,retry_total,validation_attempts_median,expected_route,expected_incident_type,llm_backend,fast_llm,quality_llm,started_at
+q01,3,1.0,8915,9878,"[('incident', 3)]","[('cpu-spike', 3)]","[('cpu-spike', 3)]","[('payments-service', 3)]",0,2,incident,,openai,openai:gpt-4o-mini,openai:gpt-4o,2026-10-21T22:39:55+09:00
+q02,3,1.0,6090,6685,"[('incident', 3)]","[('memory-leak', 3)]","[('memory-leak', 3)]","[('cache-service', 3)]",0,1,incident,,openai,openai:gpt-4o-mini,openai:gpt-4o,2026-10-21T22:39:55+09:00
+q03,3,1.0,5884,6597,"[('incident', 3)]","[('disk-full', 3)]","[('disk-full', 3)]","[('log-service', 3)]",0,1,incident,,openai,openai:gpt-4o-mini,openai:gpt-4o,2026-10-21T22:39:55+09:00
+q04,3,1.0,8137,11328,"[('incident', 3)]","[('network-timeout', 3)]","[('network-timeout', 3)]","[('gateway-service,payments-service', 3)]",0,1,incident,,openai,openai:gpt-4o-mini,openai:gpt-4o,2026-10-21T22:39:55+09:00
+q05,3,1.0,7998,9008,"[('incident', 3)]","[('high-latency', 3)]","[('high-latency', 3)]","[('web-01,auth-service', 3)]",0,1,incident,,openai,openai:gpt-4o-mini,openai:gpt-4o,2026-10-21T22:39:55+09:00
+q06,3,1.0,7267,7345,"[('incident', 3)]","[('cpu-spike', 3)]","[('cpu-spike', 3)]","[('payments-service,cache-service', 3)]",0,1,incident,,openai,openai:gpt-4o-mini,openai:gpt-4o,2026-10-21T22:39:55+09:00
+q07,3,1.0,6741,10503,"[('incident', 3)]","[('high-latency', 3)]","[('high-latency', 3)]","[('auth-service', 3)]",0,1,incident,,openai,openai:gpt-4o-mini,openai:gpt-4o,2026-10-21T22:39:55+09:00
+q08,3,1.0,4455,4948,"[('incident', 3)]","[('None', 3)]","[('None', 3)]","[('', 3)]",0,1,incident,,openai,openai:gpt-4o-mini,openai:gpt-4o,2026-10-21T22:39:55+09:00
+q09,3,1.0,1867,2072,"[('chat', 3)]","[('None', 3)]","[('None', 3)]","[('', 3)]",0,0,chat,,openai,openai:gpt-4o-mini,openai:gpt-4o,2026-10-21T22:39:55+09:00
+q10,3,1.0,3712,4845,"[('chat', 3)]","[('None', 3)]","[('None', 3)]","[('', 3)]",0,0,chat,,openai,openai:gpt-4o-mini,openai:gpt-4o,2026-10-21T22:39:55+09:00

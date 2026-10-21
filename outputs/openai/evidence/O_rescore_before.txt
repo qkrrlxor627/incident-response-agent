@@ -1,0 +1,44 @@
+$ ./.venv/bin/python3 bench/rescore.py --tag openai_before
+# openai_before 정확도 재채점 (정답: bench/eval_set.json)
+
+id   rep 조사한 시스템                            runbook          route type recall prec topic
+q01  1   payments-service                   cpu-spike        O     O    1.00   1.00 1.00
+q01  2   payments-service                   cpu-spike        O     O    1.00   1.00 1.00
+q01  3   payments-service                   cpu-spike        O     O    1.00   1.00 1.00
+q02  1   cache-service                      memory-leak      O     O    1.00   1.00 1.00
+q02  2   cache-service                      memory-leak      O     O    1.00   1.00 1.00
+q02  3   cache-service                      memory-leak      O     O    1.00   1.00 1.00
+q03  1   log-service                        disk-full        O     O    1.00   1.00 1.00
+q03  2   log-service                        disk-full        O     O    1.00   1.00 1.00
+q03  3   log-service                        disk-full        O     O    1.00   1.00 1.00
+q04  1   gateway-service,payments-service   cpu-spike        O     X    1.00   1.00 1.00
+q04  2   gateway-service,payments-service,auth-service high-latency     O     X    1.00   0.67 1.00
+q04  3   gateway-service,payments-service   cpu-spike        O     X    1.00   1.00 1.00
+q05  1   web-01,auth-service                high-latency     O     O    1.00   1.00 1.00
+q05  2   web-01,auth-service                high-latency     O     O    1.00   1.00 1.00
+q05  3   web-01,auth-service                high-latency     O     O    1.00   1.00 1.00
+q06  1   payments-service,cache-service     cpu-spike        O     O    1.00   1.00 1.00
+q06  2   payments-service,cache-service     cpu-spike        O     O    1.00   1.00 1.00
+q06  3   payments-service,cache-service     cpu-spike        O     O    1.00   1.00 1.00
+q07  1   auth-service                       high-latency     O     O    1.00   1.00 0.50
+q07  2   auth-service                       high-latency     O     O    1.00   1.00 0.50
+q07  3   auth-service                       high-latency     O     O    1.00   1.00 0.50
+q08  1   auth-service                       high-latency     O     X    -      0.00 0.00
+q08  2   auth-service                       high-latency     O     X    -      0.00 0.00
+q08  3   auth-service                       high-latency     O     X    -      0.00 0.00
+q09  1   -                                  None             O     -    -      -    -
+q09  2   -                                  None             O     -    -      -    -
+q09  3   -                                  None             O     -    -      -    -
+q10  1   -                                  None             O     -    -      -    1.00
+q10  2   -                                  None             O     -    -      -    1.00
+q10  3   -                                  None             O     -    -      -    1.00
+
+## 요약 (응답 성공 건 기준)
+- 응답 성공률(기존 지표): 30/30
+- route 정답률: 1.0
+- 장애 유형(runbook) 정답률: 0.75
+- 조사 범위 recall: 1.0
+- 조사 정밀도 precision: 0.861
+- 답변 토픽 포함률: 0.833
+
+저장: /Users/qkrrlxor627/subject/1020/all_total_vue_student/bench/results/openai_before_accuracy.csv

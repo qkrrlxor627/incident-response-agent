@@ -1,0 +1,22 @@
+View the evaluation results for experiment: 'openai-after-e4d9e571' at:
+https://smith.langchain.com/o/35e707dd-9517-4d01-b461-62b2e15d7fcd/datasets/59d2e1b1-01ac-445c-bf64-fbcad09d2df4/compare?selectedSessions=1d447bde-dbdd-425b-9e20-d52ef209ce93
+
+
+experiment: openai-after-e4d9e571
+q01 10218 route_ok=1.0 type_ok=1.0 system_recall=1.0 system_precision=1.0 topic_coverage=1.0 judge_quality=0.95 
+q02 7542 route_ok=1.0 type_ok=1.0 system_recall=1.0 system_precision=1.0 topic_coverage=1.0 judge_quality=1.0 
+q03 6093 route_ok=1.0 type_ok=1.0 system_recall=1.0 system_precision=1.0 topic_coverage=1.0 judge_quality=1.0 
+q04 8107 route_ok=1.0 type_ok=1.0 system_recall=1.0 system_precision=1.0 topic_coverage=1.0 judge_quality=0.9 
+q05 6307 route_ok=1.0 type_ok=1.0 system_recall=1.0 system_precision=1.0 topic_coverage=1.0 judge_quality=1.0 
+q06 6841 route_ok=1.0 type_ok=1.0 system_recall=1.0 system_precision=1.0 topic_coverage=1.0 judge_quality=0.6 
+q07 9468 route_ok=1.0 type_ok=1.0 system_recall=1.0 system_precision=1.0 topic_coverage=0.5 judge_quality=1.0 
+q08 4767 route_ok=1.0 type_ok=1.0 system_recall=None system_precision=None topic_coverage=1.0 judge_quality=1.0 
+q09 2336 route_ok=1.0 type_ok=None system_recall=None system_precision=None topic_coverage=None judge_quality=1.0 
+q10 3604 route_ok=1.0 type_ok=None system_recall=None system_precision=None topic_coverage=1.0 judge_quality=1.0 
+평균 route_ok: 1.0
+평균 type_ok: 1.0
+평균 system_recall: 1.0
+평균 system_precision: 1.0
+평균 topic_coverage: 0.944
+평균 judge_quality: 0.945
+저장: /Users/qkrrlxor627/subject/1020/all_total_vue_student/bench/results/openai-after_langsmith_eval.json

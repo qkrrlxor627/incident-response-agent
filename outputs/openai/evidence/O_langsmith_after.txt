@@ -1,0 +1,19 @@
+$ cd bench && ../.venv/bin/python3 eval_langsmith.py --prefix openai-after   # OpenAI 백엔드, judge=Ollama qwen3:8b
+View the evaluation results for experiment: 'openai-after-cb31c48d' at:
+experiment: openai-after-cb31c48d
+q01 5777 route_ok=1.0 type_ok=1.0 system_recall=1.0 system_precision=1.0 topic_coverage=1.0 judge_quality=1.0 
+q02 5841 route_ok=1.0 type_ok=1.0 system_recall=1.0 system_precision=1.0 topic_coverage=1.0 judge_quality=1.0 
+q03 6114 route_ok=1.0 type_ok=1.0 system_recall=1.0 system_precision=1.0 topic_coverage=1.0 judge_quality=1.0 
+q04 7712 route_ok=1.0 type_ok=1.0 system_recall=1.0 system_precision=1.0 topic_coverage=1.0 judge_quality=1.0 
+q05 6795 route_ok=1.0 type_ok=1.0 system_recall=1.0 system_precision=1.0 topic_coverage=1.0 judge_quality=1.0 
+q06 8004 route_ok=1.0 type_ok=1.0 system_recall=1.0 system_precision=1.0 topic_coverage=1.0 judge_quality=0.6 
+q07 5971 route_ok=1.0 type_ok=1.0 system_recall=1.0 system_precision=1.0 topic_coverage=0.5 judge_quality=1.0 
+q08 4198 route_ok=1.0 type_ok=1.0 system_recall=None system_precision=None topic_coverage=1.0 judge_quality=1.0 
+q09 1670 route_ok=1.0 type_ok=None system_recall=None system_precision=None topic_coverage=None judge_quality=1.0 
+q10 7949 route_ok=1.0 type_ok=None system_recall=None system_precision=None topic_coverage=1.0 judge_quality=1.0 
+평균 route_ok: 1.0
+평균 type_ok: 1.0
+평균 system_recall: 1.0
+평균 system_precision: 1.0
+평균 topic_coverage: 0.944
+평균 judge_quality: 0.96
