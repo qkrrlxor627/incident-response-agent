@@ -16,6 +16,56 @@
 ./.venv/bin/python3 bench/run_baseline.py --repeat 3 --tag baseline
 ```
 
+### ▶ 이 명령을 치면 실행되는 순서
+
+명령의 각 부분이 뜻하는 것:
+
+| 부분 | 뜻 |
+|---|---|
+| `./.venv/bin/python3` | 이 프로젝트 전용 파이썬(가상환경)으로 실행한다. 그냥 `python3`로 치면 `httpx` 같은 패키지가 없는 다른 파이썬이 잡힐 수 있다 |
+| `bench/run_baseline.py` | 실행할 파일 |
+| `--repeat 3` | 82줄 `args = ap.parse_args()`에서 `args.repeat = 3`이 된다(80줄에서 정의) |
+| `--tag baseline` | `args.tag = "baseline"`이 된다(81줄). 결과 파일 이름 `baseline_raw.jsonl`의 앞부분이 된다 |
+
+파이썬은 파일을 위에서 아래로 읽는다:
+
+```
+[클라이언트: bench/run_baseline.py]
+ 12~22줄   import argparse, json, httpx ...        도구를 불러온다
+ 24~26줄   ROOT, BASE="http://localhost:8100", TIMEOUT=300.0   상수를 정한다
+ 29·62·73·78줄   def extract / post / p95 / main    함수를 "정의만" 한다 (아직 실행하지 않음)
+ 186~187줄 if __name__ == "__main__": main()       ← 직접 실행했을 때만 여기서 main()이 시작된다
+   ↓
+ main() 78줄
+   82줄   args = ap.parse_args()                     --repeat 3 --tag baseline을 읽는다
+   86줄   queries = json.loads(...queries.json)      [97% 흐름 ①]
+   90줄   with httpx.Client(timeout=300) as client:  HTTP 클라이언트를 연다
+   91줄   client.get(".../health")                   서버 조건(모델 이름 등)을 기록한다
+   105줄  post(client, "web-01 CPU 급증 ...")         워밍업 1회 (기록에는 넣지 않음)
+   113줄  raw_path.open("w")                         baseline_raw.jsonl을 새로 쓴다(덮어쓰기)
+   117~149줄  반복: post() → extract() → ok 판정 → 한 줄 저장   [97% 흐름 ②~⑥]
+   153줄  summary_path.open("w")                     baseline_summary.csv를 쓴다 [⑦]
+   180~182줄  print(... 성공률 0.97)                 터미널에 출력한다 [⑧]
+```
+
+`post()`(62줄)가 `/chat`을 부르면 **서버 쪽**에서 실행되는 코드:
+
+```
+[서버: server.py, 터미널 2에서 떠 있는 프로세스]
+ 141~142줄  @app.post("/chat") async def chat(req)      요청을 받는다
+ 126줄      _handle_chat(message, thread_id)
+ 128줄        session_store.load(thread_id)             이전 대화를 불러온다
+ 130줄        app.state.graph.ainvoke({...})            LangGraph 에이전트 실행
+                └ agent/graph.py:310 build_graph()가 만든 흐름:
+                  route → plan → gate → research → replan_check → analysis → write → validate → finalize
+                  research(graph.py:162~169)가 MCP로 모니터링·runbook을 가져오고 TaskCompleted 이벤트를 남긴다
+ 135~136줄    session_store.append(...)                 대화를 저장한다
+ 143~144줄  return {"reply", "events", "metadata"}       응답 JSON
+   ↓
+[다시 클라이언트] 127줄 extract(body)가 이 "events"에서 조사한 시스템(source=monitoring)과
+                  runbook(source=runbook)을 꺼낸다
+```
+
 ### 코드 흐름 — `bench/run_baseline.py`의 `main()`
 
 | 순서 | 줄 | 코드 | 하는 일 |
@@ -79,6 +129,37 @@ cut -d, -f1,3 bench/results/baseline_summary.csv
 
 ```bash
 ./.venv/bin/python3 bench/rescore.py --tag baseline
+```
+
+### ▶ 이 명령을 치면 실행되는 순서
+
+| 부분 | 뜻 |
+|---|---|
+| `bench/rescore.py` | 실행할 파일. 서버를 부르지 않는다 |
+| `--tag baseline` | 20줄 `a = ap.parse_args()`에서 `a.tag = "baseline"`이 된다 → `baseline_raw.jsonl`을 읽고 `baseline_accuracy.csv`를 쓴다 |
+
+```
+[bench/rescore.py]
+ 7~10줄   import argparse, csv, json ...
+ 12줄     from eval_metrics import load_expected, mean, score
+            └ 이 순간 bench/eval_metrics.py 파일 전체가 한 번 실행된다:
+              13줄 EVAL_SET = .../eval_set.json 경로를 정하고
+              17·22·43줄 load_expected / score / mean 함수를 "정의만" 한다
+ 14줄     ROOT = bench 폴더 경로
+ 17줄     def main(): (정의만)
+ 74~75줄  if __name__ == "__main__": main()            ← 여기서 시작
+   ↓
+ main()
+   20줄   a = ap.parse_args()                          --tag baseline
+   23줄   load_expected()  → eval_metrics.py:17~18     eval_set.json을 읽는다 [74% 흐름 ①]
+   28~40줄 raw 파일 한 줄씩:
+            32줄 counted가 아니면 건너뛴다              [③]
+            37줄 score(...) → eval_metrics.py:22~39     한 건 채점 [④]
+                   33줄 type_ok = runbook == 정답        ★
+   42~48줄 표를 터미널에 출력한다                       (S10 캡처 화면)
+   53~61줄 ok_rows, mean(...) → eval_metrics.py:43~45   평균 [⑤]
+   62~64줄 요약을 출력한다: "장애 유형(runbook) 정답률: 0.739"
+   66~70줄 baseline_accuracy.csv에 쓴다                 [⑥]
 ```
 
 ### 어떤 파일을 조합했나
