@@ -9,6 +9,7 @@
 - LangSmith: 요청당 chat_request 루트 run 아래로 노드·LLM·MCP 호출이 계층 기록됨
 """
 import json
+import logging
 import os
 from contextlib import asynccontextmanager
 
@@ -28,6 +29,10 @@ from agent.graph import build_graph
 from agent.mcp_client import MCPClient
 from agent.session_store import SqliteSessionStore
 from agent.supervisor_v1 import run_v1
+
+# [P9 AFTER] agent.* 로거의 JSON 한 줄 로그(노드별 elapsed_ms)를 서버 터미널에 출력한다
+logging.basicConfig(level=logging.WARNING, format="%(asctime)s %(name)s %(message)s")
+logging.getLogger("agent").setLevel(logging.INFO)
 
 CREATION_COUNT = 0   # Wave 1 — 프로세스 내 Agent 번들 생성 횟수 (항상 1이어야 정상)
 
@@ -119,6 +124,7 @@ def _metadata(result: dict, run_id: str | None) -> dict:
         "supervisor_version": app.state.deps.version,
         "instance_id": app.state.instance_id,
         "langsmith_run_id": run_id,
+        "timings_ms": result.get("timings", {}),   # [P9 AFTER] 노드별 소요 시간 — 어디가 느린지 응답에서 바로 본다
     }
 
 
@@ -176,7 +182,9 @@ async def chat_stream(message: str, thread_id: str = "default"):
                     continue
                 for node_name, delta in payload.items():
                     for ev in (delta.get("events") or [])[seen:]:
-                        ev = {**ev, "node": node_name}
+                        # [P9 BEFORE] ev = {**ev, "node": node_name}
+                        ev = {**ev, "node": node_name,   # [P9 AFTER] 이 노드가 걸린 시간(누적 ms)도 같이 보낸다
+                              "elapsed_ms": (delta.get("timings") or {}).get(node_name)}
                         yield f"data: {json.dumps(ev, ensure_ascii=False)}\n\n"
                     if delta.get("events"):
                         seen = len(delta["events"])

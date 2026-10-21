@@ -14,6 +14,13 @@ from agent.ollama_llm import OllamaFastLLM
 from agent.systems import mentioned_systems
 
 
+def fake_chat(content):
+    """[P4 AFTER] _chat이 async def가 됐으므로 가짜 함수도 코루틴이어야 한다 (Ollama 호출 없음)."""
+    async def _chat(*a, **k):
+        return content, {"usd": 0.0}
+    return _chat
+
+
 def mon(*alerts, status="degraded"):
     """research_node가 collected에 넣는 모니터링 결과 모양."""
     return {"source": "monitoring", "data": {"status": status, "alerts": list(alerts)}}
@@ -77,13 +84,14 @@ def test_plan_skips_unmonitored_system(monkeypatch):
     # q08: 모델이 auth-service를 골라도 감시 대상이 아닌 billing-service만 나온 질문이면 조사하지 않는다
     llm = OllamaFastLLM("test-model", 0.0)
     out = json.dumps({"needs_analysis": False, "tasks": [{"agent": "research", "target": "auth-service"}]})
-    monkeypatch.setattr(llm, "_chat", lambda *a, **k: (out, {"usd": 0.0}))
-    result, _ = llm.plan("billing-service 응답이 느려요", "절차")
+    monkeypatch.setattr(llm, "_chat", fake_chat(out))
+    result, _ = asyncio.run(llm.plan("billing-service 응답이 느려요", "절차"))
     assert [t for t in result["tasks"] if t["agent"] == "research"] == []
 
 
 # ── gate (교안 7단원 권위 게이트) ────────────────────────────────────────
 TASKS = [{"id": "t0", "agent": "research"}, {"id": "ta", "agent": "analysis"}]
+TASKS_2 = [{"id": "t0", "agent": "research"}, {"id": "t1", "agent": "research"}, {"id": "ta", "agent": "analysis"}]
 
 
 def test_gate_removes_analysis_when_not_needed():
@@ -92,9 +100,15 @@ def test_gate_removes_analysis_when_not_needed():
     assert out["gate_removed"] == 1
 
 
-def test_gate_keeps_analysis_when_needed():
+def test_gate_keeps_analysis_when_needed_and_two_systems():
+    out = asyncio.run(gate_node({"tasks": TASKS_2, "needs_analysis": True, "events": []}, None))
+    assert len(out["tasks"]) == 3 and out["gate_removed"] == 0
+
+
+def test_gate_removes_analysis_for_single_system_even_if_model_wants_it():
+    # [P3 AFTER] Before는 모델이 true라고 하면 시스템 1개여도 분석을 돌렸다 (q01 300초 정지의 시작점)
     out = asyncio.run(gate_node({"tasks": TASKS, "needs_analysis": True, "events": []}, None))
-    assert len(out["tasks"]) == 2 and out["gate_removed"] == 0
+    assert out["gate_removed"] == 1 and out["events"][-1]["reason"] == "research 1개 < 2"
 
 
 # ── validate (교안 9단원) ───────────────────────────────────────────────
@@ -122,8 +136,8 @@ def test_plan_researches_every_mentioned_system(monkeypatch):
     llm = OllamaFastLLM("test-model", 0.0)
     one_task = json.dumps({"needs_analysis": False,
                            "tasks": [{"agent": "research", "target": "web-01"}]})
-    monkeypatch.setattr(llm, "_chat", lambda *a, **k: (one_task, {"usd": 0.0}))
-    result, _ = llm.plan("web-01 CPU 급증, auth-service 커넥션 풀도 같이 확인해줘", "절차")
+    monkeypatch.setattr(llm, "_chat", fake_chat(one_task))
+    result, _ = asyncio.run(llm.plan("web-01 CPU 급증, auth-service 커넥션 풀도 같이 확인해줘", "절차"))
     targets = sorted(t["target"] for t in result["tasks"] if t["agent"] == "research")
     assert targets == ["auth-service", "web-01"]
 
@@ -138,13 +152,53 @@ def test_plan_recovers_every_system_in_mention_order(monkeypatch, model_tasks):
     """P1 원인 분석의 stub 실험 A~D를 그대로 고정한다. 4경우 모두 언급 순서대로 2개."""
     llm = OllamaFastLLM("test-model", 0.0)
     out = json.dumps({"needs_analysis": False, "tasks": model_tasks})
-    monkeypatch.setattr(llm, "_chat", lambda *a, **k: (out, {"usd": 0.0}))
-    result, _ = llm.plan("web-01 CPU 급증, auth-service 커넥션 풀도 같이 확인해줘", "절차")
+    monkeypatch.setattr(llm, "_chat", fake_chat(out))
+    result, _ = asyncio.run(llm.plan("web-01 CPU 급증, auth-service 커넥션 풀도 같이 확인해줘", "절차"))
     assert [t["target"] for t in result["tasks"] if t["agent"] == "research"] == ["web-01", "auth-service"]
 
 
 def test_plan_keeps_default_system_when_nothing_mentioned(monkeypatch):
     llm = OllamaFastLLM("test-model", 0.0)
-    monkeypatch.setattr(llm, "_chat", lambda *a, **k: ('{"needs_analysis": false, "tasks": []}', {"usd": 0.0}))
-    result, _ = llm.plan("로그인 응답이 느려요", "절차")
+    monkeypatch.setattr(llm, "_chat", fake_chat('{"needs_analysis": false, "tasks": []}'))
+    result, _ = asyncio.run(llm.plan("로그인 응답이 느려요", "절차"))
     assert [t["target"] for t in result["tasks"]] == ["auth-service"]
+
+
+# ── P4·P9: 비동기 호출과 노드 시간 기록 ─────────────────────────────────
+def test_fast_llm_methods_are_coroutines():
+    # [P4 AFTER] route/plan/analyze가 async여야 그래프 노드가 await할 수 있다 (Before: 동기 → 이벤트 루프 정지)
+    import inspect
+    from agent.fake_llm import FastLLM
+    from agent.openai_llm import OpenAIFastLLM
+    for cls in (OllamaFastLLM, OpenAIFastLLM, FastLLM):
+        for name in ("route", "plan", "analyze"):
+            assert inspect.iscoroutinefunction(getattr(cls, name)), f"{cls.__name__}.{name}"
+
+
+def test_ollama_payload_disables_thinking_and_uses_stage_timeout(monkeypatch):
+    # [P9 AFTER] think=false와 단계별 timeout이 실제 요청에 들어가는지 (Ollama 없이 httpx를 가짜로 바꿔 확인)
+    import agent.ollama_llm as mod
+    seen = {}
+
+    class FakeResp:
+        def raise_for_status(self): pass
+        def json(self): return {"message": {"content": "{}"}, "eval_count": 1}
+
+    class FakeClient:
+        def __init__(self, timeout): seen["timeout"] = timeout
+        async def __aenter__(self): return self
+        async def __aexit__(self, *a): return False
+        async def post(self, url, json): seen["payload"] = json; return FakeResp()
+
+    monkeypatch.setattr(mod.httpx, "AsyncClient", FakeClient)
+    asyncio.run(OllamaFastLLM("m", 0.0)._chat("s", "u"))
+    assert seen["payload"]["think"] is False and seen["timeout"] == mod.FAST_TIMEOUT
+
+
+def test_timed_wrapper_records_elapsed_ms():
+    from agent.graph import _timed
+
+    async def node(state):
+        return {"events": []}
+    out = asyncio.run(_timed("demo", node)({"timings": {"demo": 5}}))
+    assert out["timings"]["demo"] >= 5   # 같은 노드가 다시 돌면 누적된다

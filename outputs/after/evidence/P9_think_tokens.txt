@@ -1,0 +1,6 @@
+# P9 확인 — qwen3 think 옵션 유무에 따른 생성 토큰 수 (2026-10-21 21:09, ollama 0.33.0)
+# 명령: curl -s localhost:11434/api/chat -d '{"model":"qwen3:0.6b","messages":[{"role":"user","content":"1+1?"}],"stream":false[,"think":false]}'
+think 옵션: (없음=Before) | thinking 필드 길이: 652 | eval_count: 190 | 총 시간(ms): 958
+think 옵션: ,"think":false | thinking 필드 길이: 0 | eval_count: 9 | 총 시간(ms): 59
+[qwen3:8b write류] think 옵션: (없음=Before) | thinking 길이: 1498 | 답변 길이: 173 | eval_count: 409 | 총 시간(ms): 18864
+[qwen3:8b write류] think 옵션: ,"think":false | thinking 길이: 0 | 답변 길이: 59 | eval_count: 38 | 총 시간(ms): 1857

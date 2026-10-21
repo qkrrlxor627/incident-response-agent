@@ -11,6 +11,7 @@ fc
 사전 조건: `ollama serve` 실행 중 + `ollama pull qwen3:0.6b qwen3:8b`.
 """
 import json
+import os
 import re
 from pathlib import Path
 
@@ -18,6 +19,17 @@ import httpx
 from langsmith import traceable
 
 OLLAMA_URL = "http://127.0.0.1:11434/api/chat"
+
+# ── [P9 AFTER] 단계별 시간 제한 (Before: 모든 호출이 timeout=300.0 하나) ──
+#    route·plan·analyze는 짧은 JSON 출력이라 60초면 충분하다. 넘으면 '멈춤'으로 보고 빨리 실패시킨다.
+#    q01 Before: analyze 한 번이 300.07초 동안 멈춘 뒤 ReadTimeout (outputs/before/evidence/S11)
+FAST_TIMEOUT = float(os.environ.get("OLLAMA_FAST_TIMEOUT", "60"))     # route / plan / analyze / chat
+WRITE_TIMEOUT = float(os.environ.get("OLLAMA_WRITE_TIMEOUT", "180"))  # 최종 답변(qwen3:8b, 토큰 스트림)
+# ── [P9 AFTER] qwen3의 '생각(thinking)' 토큰을 끈다 ──
+#    think를 지정하지 않으면 qwen3는 답 전에 숨은 사고 토큰을 만든다.
+#    실측(outputs/after/evidence/P9_think_tokens.txt): 0.6b 190 → 9 토큰, 8b 409 → 38 토큰, 18.9초 → 1.9초
+#    트레이드오프: 답변이 짧아질 수 있다 → After 측정의 judge 점수로 품질을 같이 확인한다
+OLLAMA_THINK = os.environ.get("OLLAMA_THINK", "false").lower() == "true"
 
 
 # ── [#14 BEFORE] graph.py·ollama_llm.py·openai_llm.py에 똑같이 복사돼 있던 시스템 추출 로직 ──
@@ -95,17 +107,26 @@ class OllamaLLM:
         self.model = model
         self.usd_per_1k = usd_per_1k_tokens
 
-    def _chat(self, system: str, user: str, schema: dict | None = None) -> tuple[str, dict]:
+    # ── [P4 BEFORE] async 노드 안에서 '동기' HTTP 호출 → 응답을 기다리는 동안 이벤트 루프 전체가 멈춤 ──
+    #    (다른 사용자의 /health가 최대 1.73초 지연(S5), q01은 300초 동안 서버가 이 호출에 묶임(S11))
+    # def _chat(self, system: str, user: str, schema: dict | None = None) -> tuple[str, dict]:
+    #     payload = {..., "stream": False, "options": {"temperature": 0.0}}
+    #     resp = httpx.post(OLLAMA_URL, json=payload, timeout=300.0)
+    # ── [P4 AFTER] httpx.AsyncClient + await → 기다리는 동안 다른 요청을 처리한다 (K12 블로킹 금지) ──
+    async def _chat(self, system: str, user: str, schema: dict | None = None,
+                    timeout: float = FAST_TIMEOUT) -> tuple[str, dict]:
         payload = {
             "model": self.model,
             "messages": [{"role": "system", "content": system},
                          {"role": "user", "content": user}],
             "stream": False,
+            "think": OLLAMA_THINK,            # [P9 AFTER] 숨은 사고 토큰 끔
             "options": {"temperature": 0.0},
         }
         if schema is not None:
             payload["format"] = schema
-        resp = httpx.post(OLLAMA_URL, json=payload, timeout=300.0)
+        async with httpx.AsyncClient(timeout=timeout) as client:   # [P9 AFTER] 단계별 timeout
+            resp = await client.post(OLLAMA_URL, json=payload)       # await: 여기서 이벤트 루프를 양보한다
         resp.raise_for_status()
         data = resp.json()
         content = data["message"]["content"]
@@ -114,7 +135,8 @@ class OllamaLLM:
                  "usd": round(tokens / 1000 * self.usd_per_1k, 6)}
         return content, usage
 
-    async def _chat_stream(self, system: str, user: str, on_token=None) -> tuple[str, dict]:
+    async def _chat_stream(self, system: str, user: str, on_token=None,
+                           timeout: float = FAST_TIMEOUT) -> tuple[str, dict]:
         """사용자 대면 텍스트(최종 답변류) 전용 — Ollama NDJSON 스트림을 토큰 단위로
         받아 on_token(조각)을 즉시 호출해 SSE로 실시간 중계할 수 있게 한다. 분류/계획
         등 JSON 스키마 출력(route/plan/analyze)은 부분 출력이 의미가 없어 그대로 _chat을
@@ -124,11 +146,13 @@ class OllamaLLM:
             "messages": [{"role": "system", "content": system},
                          {"role": "user", "content": user}],
             "stream": True,
+            "think": OLLAMA_THINK,            # [P9 AFTER]
             "options": {"temperature": 0.0},
         }
         chunks: list[str] = []
         usage = {"model": self.name, "tokens": 0, "usd": 0.0}
-        async with httpx.AsyncClient(timeout=300.0) as client:
+        # [P9 BEFORE] async with httpx.AsyncClient(timeout=300.0) as client:
+        async with httpx.AsyncClient(timeout=timeout) as client:   # [P9 AFTER] 호출한 단계의 timeout
             async with client.stream("POST", OLLAMA_URL, json=payload) as resp:
                 resp.raise_for_status()
                 async for line in resp.aiter_lines():
@@ -153,12 +177,12 @@ class OllamaFastLLM(OllamaLLM):
     """분류·계획·단순 대화 전담 (저사양 소형 모델)."""
 
     @traceable(run_type="llm", name="ollama_fast.route")
-    def route(self, query: str) -> tuple[dict, dict]:
+    async def route(self, query: str) -> tuple[dict, dict]:   # [P4 AFTER] def → async def
         system = ("당신은 ICT 운영 지원 라우터다. 사용자 요청을 분류하라. "
                   "장애·성능 저하·지연·진단·모니터링·티켓 등 운영 이슈면 route=incident, "
                   "인사·잡담·일반 질문이면 route=chat. "
                   "needs_analysis는 패턴 비교/통계 분석이 꼭 필요할 때만 true.")
-        content, usage = self._chat(system, query, schema=ROUTE_SCHEMA)
+        content, usage = await self._chat(system, query, schema=ROUTE_SCHEMA)
         try:
             raw = json.loads(content)
             route = raw.get("route") if raw.get("route") in ("chat", "incident") else None
@@ -172,7 +196,7 @@ class OllamaFastLLM(OllamaLLM):
         return result, usage
 
     @traceable(run_type="llm", name="ollama_fast.plan")
-    def plan(self, query: str, procedure_prompt: str) -> tuple[dict, dict]:
+    async def plan(self, query: str, procedure_prompt: str) -> tuple[dict, dict]:   # [P4 AFTER]
         system = ("당신은 ICT 운영 Supervisor의 planning 노드다. 표준 진단 절차에 따라 "
                   "실행 계획(tasks)을 JSON으로 세워라. "
                   "사용자 요청에 등장한 시스템마다 agent=research task를 하나씩 세워라 "
@@ -180,7 +204,7 @@ class OllamaFastLLM(OllamaLLM):
                   "언급되지 않았으면 auth-service를 기본으로 조사하라). "
                   "패턴 분석이 꼭 필요하다고 판단되면 agent=analysis task를 추가해도 된다.")
         user = f"## 표준 절차\n{procedure_prompt}\n\n## 사용자 요청\n{query}"
-        content, usage = self._chat(system, user, schema=PLAN_SCHEMA)
+        content, usage = await self._chat(system, user, schema=PLAN_SCHEMA)
 
         # 소형 모델 출력에 대한 코드 레벨 정규화 — 스키마는 강제돼도 내용은 흔들릴 수
         # 있으므로(대상 시스템 오타, task 누락/중복) 실행 가능한 형태로 보정한다.
@@ -241,7 +265,7 @@ class OllamaFastLLM(OllamaLLM):
         return result, usage
 
     @traceable(run_type="llm", name="ollama_fast.analyze")
-    def analyze(self, collected: list[dict]) -> tuple[str, dict]:
+    async def analyze(self, collected: list[dict]) -> tuple[str, dict]:   # [P4 AFTER]
         system = ("당신은 ICT 운영 패턴 분석가다. 여러 시스템의 모니터링 결과를 비교해 "
                   "공통 원인이 의심되는 패턴이 있는지 한두 문장으로 짧게 답하라. "
                   "패턴이 없으면 '특이 패턴 없음'이라고만 답하라.")
@@ -249,7 +273,7 @@ class OllamaFastLLM(OllamaLLM):
         facts = "\n".join(
             f"- {d['system_name']}: 상태={d['status']}, CPU {d['cpu_percent']}%, "
             f"알림 {d['alerts']}" for d in mon) or "(모니터링 데이터 없음)"
-        return self._chat(system, facts)
+        return await self._chat(system, facts)
 
     @traceable(run_type="llm", name="ollama_fast.chat")
     async def chat(self, query: str, history: list[dict], on_token=None) -> tuple[str, dict]:
@@ -286,4 +310,4 @@ class OllamaQualityLLM(OllamaLLM):
         user = f"## 사용자 요청\n{query}\n\n## 수집된 사실\n" + "\n".join(facts)
         if feedback:
             user += f"\n\n## 이전 초안에 대한 검증 반려 사유 (반드시 반영)\n{feedback}"
-        return await self._chat_stream(system, user, on_token=on_token)
+        return await self._chat_stream(system, user, on_token=on_token, timeout=WRITE_TIMEOUT)   # [P9 AFTER] write만 180초

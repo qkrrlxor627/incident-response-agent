@@ -1,0 +1,21 @@
+# P3·P4·P9 After — 실모델 서버(:8199)에 장애 질문 3건, 처리 중 /health 0.5초 간격 측정 (2026-10-21 21:12)
+# 명령: bash outputs/after/scripts/realserver.sh ./.venv/bin/python3 outputs/after/scripts/probe_p4.py '<질문>'
+# 1회 측정이다. 30건 통계는 8단계 After 측정(bench/results/after_*)을 본다.
+질문: payments-service 결제 응답이 느려지고 CPU가 치솟았어요, 원인 확인해주세요
+총 응답 시간: 11.0초
+노드별 ms: {"route": 257, "plan": 642, "gate": 0, "research": 1061, "replan_check": 0, "analysis": 0, "write": 8941, "validate": 1, "finalize": 0}
+이벤트: RouteDecided → PlanCreated → GateApplied[research 1개 < 2] → TaskCompleted(payments-service) → ReplanCheck(cpu-spike) → TaskCompleted(cpu-spike) → ReplanCheck → AnalysisSkipped[analysis task 0개] → DraftWritten → Validation → Finalize
+/health 측정 22회: 최대 6.1ms, 중앙값 0.9ms (Before S5: 최대 1730ms)
+답변 앞부분: '1) 모니터링 상태 확인: payments-service의 상태가 degraded로 확인되었으며, CPU 사용률은 91.5%, 메모리 사용률은 55.3%로 높은 수치를 보이고 있습니다.  \n2) 요청 패턴 및 로그 분석: 최근 배포 및 트래픽 변화 시점과 특정 요청 패'
+질문: payments-service랑 cache-service 둘 다 저하됐는데 공통 원인이 있는지 분석해줘
+총 응답 시간: 9.7초
+노드별 ms: {"route": 181, "plan": 414, "gate": 0, "research": 734, "replan_check": 0, "analysis": 155, "write": 8199, "validate": 0, "finalize": 0}
+이벤트: RouteDecided → PlanCreated → GateApplied[allowed] → TaskCompleted(payments-service) → TaskCompleted(cache-service) → ReplanCheck(cpu-spike) → TaskCompleted(cpu-spike) → ReplanCheck → AnalysisCompleted → DraftWritten → Validation → Finalize
+/health 측정 20회: 최대 8.9ms, 중앙값 1.7ms (Before S5: 최대 1730ms)
+답변 앞부분: '1) payments-service와 cache-service 모두 상태가 degraded로 나타났으며, 공통 원인으로는 CPU 및 메모리 사용률의 비정상적인 상승이 추정된다.  \n2) payments-service는 CPU 89.7% 및 알림 2건(특히 CPU 91%'
+질문: log-service 디스크 공간이 부족하다는 알림이 왔어요
+총 응답 시간: 9.1초
+노드별 ms: {"route": 244, "plan": 461, "gate": 0, "research": 716, "replan_check": 5, "analysis": 0, "write": 7680, "validate": 0, "finalize": 0}
+이벤트: RouteDecided → PlanCreated → GateApplied[research 1개 < 2] → TaskCompleted(log-service) → ReplanCheck(disk-full) → TaskCompleted(disk-full) → ReplanCheck → AnalysisSkipped[analysis task 0개] → DraftWritten → Validation → Finalize
+/health 측정 19회: 최대 11.0ms, 중앙값 0.9ms (Before S5: 최대 1730ms)
+답변 앞부분: '1) 모니터링 상태 확인: log-service의 디스크 사용률이 95%로 임계 수준(90% 이상)에 도달하여 상태가 degraded로 표시됨.  \n2) 디스크 정리 수행: 로그 파일, 임시 파일, 오래된 백업 등 안전하게 삭제 가능한 항목부터 정리하여 즉시 디스크 공'

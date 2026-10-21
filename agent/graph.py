@@ -10,6 +10,7 @@ incident: plan(MCP Prompt 절차 반영) → gate(권위 게이트) → research
 """
 import asyncio
 import json
+import logging
 import time
 from functools import partial
 from pathlib import Path
@@ -73,6 +74,7 @@ class AgentState(TypedDict, total=False):
     last_prompt: str
     cost_usd: float
     events: list[dict]
+    timings: dict   # [P9 AFTER] 노드별 소요 시간(ms) — 병목 위치를 응답 metadata에서 바로 본다
 
 
 def _cost(state: AgentState, usage: dict) -> float:
@@ -82,7 +84,8 @@ def _cost(state: AgentState, usage: dict) -> float:
 @traceable(name="route_node")
 async def route_node(state: AgentState, deps: SupervisorDeps) -> dict:
     """Wave 5 — 모든 쿼리가 무거운 파이프라인을 탈 필요는 없다."""
-    result, usage = deps.fast_llm.route(state["query"])
+    # [P4 BEFORE] result, usage = deps.fast_llm.route(state["query"])   ← 동기 호출: 이벤트 루프 정지
+    result, usage = await deps.fast_llm.route(state["query"])   # [P4 AFTER] await
     event = {"type": "RouteDecided", "route": result["route"]}
     return {"route": result["route"], "needs_analysis": result["needs_analysis"],
             "cost_usd": _cost(state, usage),
@@ -117,7 +120,8 @@ async def plan_node(state: AgentState, deps: SupervisorDeps) -> dict:
         {"system_name": _extract_system_name(state["query"]), "symptom": state["query"]},
         server=prompt_server,
     )
-    result, usage = deps.fast_llm.plan(state["query"], procedure)
+    # [P4 BEFORE] result, usage = deps.fast_llm.plan(state["query"], procedure)
+    result, usage = await deps.fast_llm.plan(state["query"], procedure)   # [P4 AFTER]
     targets = [t["target"] for t in result["tasks"]
                if t["agent"] == "research" and t.get("target")]
     event = {"type": "PlanCreated", "task_count": len(result["tasks"]),
@@ -131,12 +135,23 @@ async def gate_node(state: AgentState, deps: SupervisorDeps) -> dict:
     """Wave 6 — 권위 게이트. needs_analysis=False인데 섞여 들어온 analysis task를
     프롬프트가 아니라 코드로 강제 제거한다."""
     tasks = state["tasks"]
-    if not state.get("needs_analysis", False):
-        kept = [t for t in tasks if t["agent"] != "analysis"]
-        removed = len(tasks) - len(kept)
-    else:
-        kept, removed = tasks, 0
-    event = {"type": "GateApplied", "removed_analysis_tasks": removed}
+    # ── [P3 BEFORE] 모델의 needs_analysis 판단만 믿음 → 0.6b 모델은 거의 항상 true (incident 8종 중 7종에서 분석 실행) ──
+    # if not state.get("needs_analysis", False):
+    #     kept = [t for t in tasks if t["agent"] != "analysis"]
+    #     removed = len(tasks) - len(kept)
+    # else:
+    #     kept, removed = tasks, 0
+    # ── [P3 AFTER] 이중 게이트 (K7 권위 게이트) ──
+    #    1차: 모델이 needs_analysis=true라고 했는가 (LLM 판단)
+    #    2차: 비교할 시스템이 실제로 2개 이상인가 (코드 판단) — 1개를 '비교 분석'할 수는 없다
+    #    둘 다 통과해야 analysis task를 남긴다. 예: q01(payments 1개)은 모델이 true라고 해도 제거
+    research_count = sum(1 for t in tasks if t["agent"] == "research")
+    allow = bool(state.get("needs_analysis", False)) and research_count >= 2
+    kept = tasks if allow else [t for t in tasks if t["agent"] != "analysis"]
+    removed = len(tasks) - len(kept)
+    event = {"type": "GateApplied", "removed_analysis_tasks": removed,
+             "reason": "allowed" if allow else
+             ("needs_analysis=false" if not state.get("needs_analysis") else f"research {research_count}개 < 2")}
     return {"tasks": kept, "gate_removed": removed,
             "events": state["events"] + [event]}
 
@@ -291,7 +306,9 @@ async def analysis_node(state: AgentState, deps: SupervisorDeps) -> dict:
     if not pending:
         return {"events": state["events"] +
                 [{"type": "AnalysisSkipped", "reason": "analysis task 0개"}]}
-    summary, usage = deps.fast_llm.analyze(state.get("collected", []))
+    # [P4 BEFORE] summary, usage = deps.fast_llm.analyze(state.get("collected", []))
+    #    ← q01 Before: 이 동기 호출 하나가 300.07초 동안 서버를 멈춘 뒤 ReadTimeout (S11)
+    summary, usage = await deps.fast_llm.analyze(state.get("collected", []))   # [P4 AFTER]
     new_tasks = [dict(t) for t in tasks]
     for t in new_tasks:
         if t["agent"] == "analysis" and t["status"] == "pending":
@@ -358,9 +375,32 @@ def _after_validate(state: AgentState) -> str:
     return "finalize" if state.get("validation_feedback") is None else "write"
 
 
+log = logging.getLogger("agent.graph")
+
+
+def _timed(name: str, fn):
+    """[P9 AFTER] 노드 실행 시간을 재서 state['timings']에 누적하고, JSON 한 줄로 로그를 남긴다.
+
+    Before에는 노드별 시간이 LangSmith에만 있었다 → 서버 로그와 응답만으로는 병목을 알 수 없었다.
+    같은 노드가 여러 번 돌면(research 재조사, write 재작성) 시간을 더한다.
+    """
+    async def run(state: AgentState) -> dict:
+        started = time.perf_counter()
+        out = await fn(state)
+        ms = round((time.perf_counter() - started) * 1000)
+        timings = dict(state.get("timings") or {})
+        timings[name] = timings.get(name, 0) + ms
+        log.info(json.dumps({"event": "node_done", "node": name, "elapsed_ms": ms,
+                             "thread_id": state.get("thread_id")}, ensure_ascii=False))
+        return {**out, "timings": timings}
+    return run
+
+
 def build_graph(deps: SupervisorDeps):
     g = StateGraph(AgentState)
-    node = lambda fn: partial(fn, deps=deps)   # Wave 13 — 명시적 의존성 주입
+    # [P9 BEFORE] node = lambda fn: partial(fn, deps=deps)   # Wave 13 — 명시적 의존성 주입
+    # [P9 AFTER] 의존성 주입은 그대로 두고, 바깥에 시간 측정 래퍼(_timed)를 씌운다
+    node = lambda fn: _timed(fn.__name__.removesuffix("_node"), partial(fn, deps=deps))
     g.add_node("route", node(route_node))
     g.add_node("chat_answer", node(chat_answer_node))
     g.add_node("plan", node(plan_node))
