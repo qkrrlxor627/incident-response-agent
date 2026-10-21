@@ -28,7 +28,7 @@ from agent.errors import classify
 from agent.fake_llm import FastLLM, QualityLLM
 from agent.graph import build_graph
 from agent.mcp_client import MCPClient
-from agent.session_store import SqliteSessionStore
+from agent.session_store import create_session_store
 from agent.supervisor_v1 import run_v1
 
 # [P9 AFTER] agent.* 로거의 JSON 한 줄 로그(노드별 elapsed_ms)를 서버 터미널에 출력한다
@@ -94,7 +94,8 @@ async def lifespan(app: FastAPI):
         fast_llm=fast_llm,
         quality_llm=quality_llm,
         mcp=mcp,
-        session_store=SqliteSessionStore(),
+        # [E15 BEFORE] session_store=SqliteSessionStore(),   ← 동기 저장소
+        session_store=create_session_store(),   # [E15 AFTER] 비동기 저장소를 팩토리로 주입
         version=os.environ.get("SUPERVISOR_VERSION", "v2"),
     )
     app.state.deps = deps
@@ -149,10 +150,10 @@ def _metadata(result: dict, run_id: str | None) -> dict:
 @traceable(name="chat_request")
 async def _handle_chat(message: str, thread_id: str) -> tuple[dict, str | None]:
     deps = app.state.deps
-    history = deps.session_store.load(thread_id)   # Wave 12
+    history = await deps.session_store.load(thread_id)   # Wave 12
     # [P7 AFTER] 사용자 메시지를 '먼저' 저장한다 — 처리 도중 실패해도 질문은 이력에 남는다
     #   (Before: 성공한 뒤에만 user·assistant를 같이 저장 → 실패한 턴은 질문까지 사라졌다)
-    deps.session_store.append(thread_id, "user", message)
+    await deps.session_store.append(thread_id, "user", message)   # [E15 AFTER] await
     if deps.version == "v2":
         result = await app.state.graph.ainvoke(
             {"query": message, "thread_id": thread_id, "history": history,
@@ -160,7 +161,7 @@ async def _handle_chat(message: str, thread_id: str) -> tuple[dict, str | None]:
     else:
         result = await run_v1(deps, message, thread_id, history)   # Wave 14
     # [P7 BEFORE] deps.session_store.append(thread_id, "user", message)
-    deps.session_store.append(thread_id, "assistant", result["final"])
+    await deps.session_store.append(thread_id, "assistant", result["final"])   # [E15 AFTER] await
     rt = get_current_run_tree()
     return result, (str(rt.id) if rt else None)
 
@@ -210,15 +211,15 @@ async def chat_stream(message: str = Query(min_length=1, max_length=MAX_MESSAGE_
 
     @traceable(name="chat_stream_request")   # [P7 AFTER] 스트림 요청도 LangSmith 루트 run으로 남긴다 (Before: /chat만 chat_request로 기록)
     async def _events():
-        history = deps.session_store.load(thread_id)
-        deps.session_store.append(thread_id, "user", message)   # [P7 AFTER] 질문을 먼저 저장 (중간에 끊겨도 남는다)
+        history = await deps.session_store.load(thread_id)   # [E15 AFTER] await
+        await deps.session_store.append(thread_id, "user", message)   # [P7 AFTER] 질문을 먼저 저장 (중간에 끊겨도 남는다)
         if deps.version != "v2":
             result = await run_v1(deps, message, thread_id, history)
             for ev in result["events"]:
                 yield f"data: {json.dumps(ev, ensure_ascii=False)}\n\n"
             yield f"data: {json.dumps({'type': 'FinalAnswer', 'reply': result['final']}, ensure_ascii=False)}\n\n"
             # [P7 AFTER] v1 스트림도 답변을 저장한다 (Before: v1 분기는 이력을 전혀 저장하지 않았다)
-            deps.session_store.append(thread_id, "assistant", result["final"])
+            await deps.session_store.append(thread_id, "assistant", result["final"])   # [E15 AFTER] await
         else:
             seen = 0
             final = ""
@@ -246,7 +247,7 @@ async def chat_stream(message: str = Query(min_length=1, max_length=MAX_MESSAGE_
                         last_prompt = delta["last_prompt"]
             yield f"data: {json.dumps({'type': 'FinalAnswer', 'reply': final, 'prompt': last_prompt}, ensure_ascii=False)}\n\n"
             # [P7 BEFORE] deps.session_store.append(thread_id, "user", message)   ← 끝까지 간 경우에만 저장
-            deps.session_store.append(thread_id, "assistant", final)
+            await deps.session_store.append(thread_id, "assistant", final)   # [E15 AFTER] await
 
     # [P7 BEFORE] return StreamingResponse(gen(), media_type="text/event-stream")
     # [P7 AFTER] SSE 헤더: 프록시(nginx 등)·브라우저가 버퍼링/캐시하지 않고 이벤트를 즉시 흘려보내게 한다

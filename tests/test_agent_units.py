@@ -331,8 +331,7 @@ def test_stream_sends_error_event_then_done():
             raise _httpx.ConnectError("ollama down")
             yield  # pragma: no cover
 
-    server.app.state.deps = SimpleNamespace(version="v2", session_store=SimpleNamespace(
-        load=lambda t: [], append=lambda *a: None))
+    server.app.state.deps = SimpleNamespace(version="v2", session_store=_MemStore())
     server.app.state.graph = BrokenGraph()
     body = TestClient(server.app).get("/chat/stream", params={"message": "web-01 장애"}).text
     assert '"type": "Error"' in body and '"code": "LLM_UNAVAILABLE"' in body
@@ -344,10 +343,10 @@ class _MemStore:
     def __init__(self):
         self.rows = []
 
-    def load(self, thread_id):
+    async def load(self, thread_id):   # [E15 AFTER] 저장소 인터페이스가 async가 됐다
         return [r for r in self.rows if r[0] == thread_id]
 
-    def append(self, thread_id, role, content):
+    async def append(self, thread_id, role, content):
         self.rows.append((thread_id, role, content))
 
 
@@ -385,3 +384,59 @@ def test_stream_has_sse_headers_and_keeps_question_when_it_fails():
     r = _client_with(BrokenGraph(), store).get("/chat/stream", params={"message": "web-01 장애", "thread_id": "t1"})
     assert r.headers["cache-control"] == "no-cache" and r.headers["x-accel-buffering"] == "no"
     assert store.rows == [("t1", "user", "web-01 장애")]   # Before: 실패한 턴은 질문까지 사라졌다
+
+
+# ── E15: 비동기 세션 저장소 ───────────────────────────────────────────────
+def test_session_store_is_async_and_persists(tmp_path):
+    from agent.session_store import SqliteSessionStore
+    db = tmp_path / "s.db"
+
+    async def scenario():
+        store = SqliteSessionStore(db)
+        await asyncio.gather(*(store.append("t", "user", f"m{i}") for i in range(20)))   # 동시 쓰기
+        return await SqliteSessionStore(db).load("t")   # 새 인스턴스(= 서버 재시작)에서도 읽힌다
+    rows = asyncio.run(scenario())
+    assert len(rows) == 20 and {r["content"] for r in rows} == {f"m{i}" for i in range(20)}
+
+
+def test_session_store_has_thread_index(tmp_path):
+    import sqlite3
+
+    from agent.session_store import SqliteSessionStore
+    SqliteSessionStore(tmp_path / "s.db")
+    names = [r[0] for r in sqlite3.connect(tmp_path / "s.db").execute("SELECT name FROM sqlite_master WHERE type='index'")]
+    assert "idx_messages_thread" in names
+
+
+# ── P10: v1 롤백 (기준 외 제안) ───────────────────────────────────────────
+class _V1MCP:
+    def __init__(self):
+        self.asked = []
+
+    async def call_tool(self, name, args):
+        self.asked.append(args["system_name"])
+        return {"system_name": args["system_name"], "status": "degraded", "cpu_percent": 90.0}
+
+
+class _ChatLLM:
+    async def chat(self, query, history):
+        return "안녕하세요", {"usd": 0.0}   # '도와드릴까요'를 말하지 않는 실모델 흉내
+
+
+def test_v1_checks_monitoring_for_incident_without_magic_phrase():
+    # [P10 AFTER] Before: 응답에 '도와드릴까요'가 없으면 장애 질문도 모니터링 안 함 + auth-service 고정 (S9)
+    from types import SimpleNamespace
+
+    from agent.supervisor_v1 import run_v1
+    mcp = _V1MCP()
+    out = asyncio.run(run_v1(SimpleNamespace(mcp=mcp, fast_llm=_ChatLLM()), "web-01 장애 진단해줘", "t", []))
+    assert mcp.asked == ["web-01"] and "web-01 상태=degraded" in out["final"]
+
+
+def test_v1_plain_chat_does_not_call_monitoring():
+    from types import SimpleNamespace
+
+    from agent.supervisor_v1 import run_v1
+    mcp = _V1MCP()
+    out = asyncio.run(run_v1(SimpleNamespace(mcp=mcp, fast_llm=_ChatLLM()), "안녕", "t", []))
+    assert mcp.asked == [] and out["final"] == "안녕하세요"
