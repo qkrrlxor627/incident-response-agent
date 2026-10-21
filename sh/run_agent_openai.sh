@@ -49,7 +49,7 @@ esac
 
 # ── 1) 이전 실행 정리 ──────────────────────────────────────────────────
 lsof -ti:8100 | xargs kill -9 2>/dev/null || true
-rm -f session.db
+rm -f session.db session.db-wal session.db-shm   # [E15 후속] WAL 모드 파일도 같이 지운다
 
 cleanup() {
     echo
