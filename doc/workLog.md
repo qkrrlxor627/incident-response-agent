@@ -165,6 +165,42 @@ LANGCHAIN_TRACING_V2=false LLM_BACKEND=fake SUPERVISOR_VERSION=v2 ./.venv/bin/py
 - `workLog.md`에는 프로젝트 진행만 남긴다.
 - `workClaude.md`도 로컬 전용이다(`.git/info/exclude`). `CLAUDE.md`에 갱신 규칙을 1줄 추가했다.
 
+### 13. 파일별 워크스루 (진행 중 — 2/8단계까지 완료)
+
+작업에 들어가기 전에 코드를 파일 단위로 같이 읽으면서, `doc/guide.md`의 문제 기록(#1~#12)이 실제 코드 어디에 있는지 확인하고 있다. 코드는 아직 수정하지 않았다.
+
+| 단계 | 파일 | 관련 기록 | 상태 |
+|---|---|---|---|
+| 0 | 전체 폴더 구조와 요청 흐름 | — | ✅ |
+| 1 | `server.py` | #3 #10 #12 | ✅ |
+| 2 | `agent/deps.py` + `agent/graph.py` | #2 #3 #8 #9 #12 | ✅ |
+| 3 | `agent/ollama_llm.py` (+ `openai_llm.py`는 다른 점만) | #1 #4 #5 | ⬜ **다음 차례** |
+| 4 | `agent/mcp_client.py` + `agent/retry.py` | #11 | ⬜ |
+| 5 | `fake_llm.py` · `session_store.py` · `supervisor_v1.py` | #6 | ⬜ |
+| 6 | `mcp_server.py` · `mcp_server_docs.py` | — | ⬜ |
+| 7 | `web_demo_server.py` + `web_chat.html` | #3 #10 | ⬜ |
+| 8 | `bench/run_baseline.py` + `queries.json` | #7 #12 | ⬜ |
+
+1~2단계에서 확인한 내용:
+- `server.py`
+  - lifespan 싱글턴은 교안 2단원을 충족한다.
+  - 브라우저가 쓰는 `/chat/stream`(148줄)은 `/chat`보다 보호 장치가 적다. 입력 검증(149), `@traceable`(157), 예외 처리, 버퍼링 헤더(192)가 없다. 이력은 스트림이 끝까지 가야만 저장한다(188-189).
+  - `logging`이 없다(197줄 `log_level="warning"`).
+- `graph.py`
+  - gate가 모델의 `needs_analysis`를 그대로 믿는다(127).
+  - `gather`에 예외 격리가 없다(172). `read_resource`는 재시도도 없다(168).
+  - 분류 규칙이 아무것도 맞지 않으면 `db-down`으로 빠진다(213).
+  - validate는 "30자 + `1)`"만 본다(279).
+  - 시간을 재는 곳은 research 하나뿐이다(171-173).
+- `deps.py`: 주입식 구조라 테스트하기 쉽다. 문제 없음.
+
+워크스루 중에 발견한 문서 불일치:
+- `guide.md`의 **#6(자동 테스트 없음)은 이미 상당 부분 해결된 상태다.** 11번 작업에서 `tests/`(15 passed, 1 xfailed)와 `requirements-dev.txt`를 만들었는데, guide.md는 그 전 상태를 기준으로 썼다.
+  - 그래서 #6의 "상태"와 ③ 내용을 갱신해야 한다.
+  - 아직 남은 부분: `OllamaFastLLM.plan()` 정규화 테스트(xfail 1건으로 고정됨), research 실패 격리 테스트, 스트림 경로 테스트.
+
+워크스루를 마친 뒤 할 일: guide.md의 최우선 순서(#12 → #6 → #7 → #1 …)대로 작업한다. 단, #6은 위 상태를 반영해 순서를 다시 본다.
+
 ### 현재 파일 위치
 
 | 파일 | 위치 | GitHub |
@@ -191,6 +227,88 @@ LANGCHAIN_TRACING_V2=false LLM_BACKEND=fake SUPERVISOR_VERSION=v2 ./.venv/bin/py
 - `baseline` 태그도 push했다. GitHub에서 개선 전 코드 시점으로 바로 이동할 수 있다.
 - 올리지 않은 것(로컬 전용): `.claude/`, `CLAUDE.md`, `doc/workClaude.md`, `doc/lessonstandard_k.md`(교안 정리본). 모두 `.git/info/exclude`에 들어 있다.
 - 커밋할 때는 경로를 지정해서 add한다(`git add .` 대신). git_guard hook이 Claude 표기와 로컬 전용 파일 add를 막는다.
+
+## 2026-10-21
+
+### 1. GPT(Codex)가 만든 설정 복사본 삭제
+
+- 아침에 GPT에 설정을 물어보다가 Codex용 복사본(`.agents/`, `.codex/`, `AGENTS.md`)이 생겼다.
+- 어제 만든 `.claude/` 구성을 "Claude"를 "Codex"로 바꿔 복사한 것뿐이라 새 내용은 없었다. 일부 경로는 깨져 있었다(`.Codex/skills/...`).
+- exclude에 들어 있지 않아서 업로드될 수 있는 상태였으므로 삭제했다. Claude 원본은 바뀐 것이 없다.
+- 삭제 후 `pytest`: 15 passed, 1 xfailed
+
+---
+
+## 컴퓨터를 다시 켰을 때 (재시작 절차)
+
+`.venv`, Ollama 모델, `.env`는 디스크에 남아 있다. 그래서 다시 설치할 필요는 없고, **프로세스만 다시 띄우면 된다.**
+
+### 0) 프로젝트 폴더로 이동 + 가상환경 켜기 (모든 터미널 공통)
+
+```bash
+cd ~/subject/1020/all_total_vue_student
+source .venv/bin/activate          # 프롬프트 앞에 (.venv)가 붙으면 성공
+python -c "import fastapi, langgraph, mcp; print('venv OK')"
+```
+- `activate`를 쓰지 않으려면 명령마다 `./.venv/bin/python3`로 실행한다.
+- `.venv`가 깨졌으면 `bash sh/setup_venv.sh`로 다시 만든다. 테스트까지 돌리려면 그다음 `./.venv/bin/python3 -m pip install -r requirements-dev.txt`도 실행한다.
+
+### 1) 코드 상태 확인 (선택, 10초)
+
+```bash
+git status --short                 # 바뀐 파일 확인
+./.venv/bin/python3 -m pytest tests -q   # 기대값: 15 passed, 1 xfailed
+```
+
+### 2-A) fake 모드로 띄우기 — 가장 빠름, 키·모델 불필요
+
+```bash
+# 터미널 1 — 백엔드 :8100
+LANGCHAIN_TRACING_V2=false LLM_BACKEND=fake SUPERVISOR_VERSION=v2 ./.venv/bin/python3 server.py
+# 터미널 2 — Vue 화면 :8600
+./.venv/bin/python3 web_demo_server.py
+```
+
+### 2-B) Ollama 실모델로 띄우기 — bench 측정, 실제 답변 확인용
+
+```bash
+# Ollama가 켜져 있는지 확인 (응답이 없으면 Ollama 앱을 실행하거나 `ollama serve &`)
+curl -s http://127.0.0.1:11434/api/tags >/dev/null && echo "ollama OK"
+ollama list                        # qwen3:0.6b, qwen3:8b가 있어야 함
+
+# 터미널 1 — 백엔드 (.env 로드 + 모델 웜업 + :8100)
+bash sh/run_agent_ollma.sh
+# 터미널 2 — Vue 화면 :8600
+bash sh/run_frontend.sh
+```
+- ⚠️ `run_agent_ollma.sh`는 실행할 때마다 **`session.db`를 지운다.** 대화 이력을 남기려면 아래처럼 직접 띄운다.
+  ```bash
+  set -a; source .env; set +a; LLM_BACKEND=ollama ./.venv/bin/python3 server.py
+  ```
+- `run_agent_openai.sh`는 실제로 **과금**된다. 필요할 때만 쓴다.
+
+### 3) 동작 확인
+
+```bash
+curl -s localhost:8100/health      # llm_backend, supervisor_version 확인
+open http://localhost:8600         # 브라우저 채팅 화면
+```
+
+### 4) 종료
+
+각 터미널에서 `Ctrl+C`를 누른다. 포트가 남아 있으면 아래로 정리한다.
+```bash
+lsof -ti:8100,8600 | xargs kill -9 2>/dev/null
+```
+
+### 5) Claude Code 작업 이어서 하기
+
+```bash
+cd ~/subject/1020/all_total_vue_student
+claude --continue                  # 마지막 대화를 그대로 이어서 연다
+```
+- 이어서 연 뒤 "workLog 13번 워크스루 3단계부터 이어서 하자"라고 말하면 된다.
+- 대화를 새로 시작해도 이 파일 13번 표와 `doc/guide.md`(#1~#12)를 보면 어디까지 했는지 알 수 있다.
 
 ---
 
