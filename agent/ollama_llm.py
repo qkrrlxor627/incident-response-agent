@@ -186,7 +186,7 @@ class OllamaLLM:
     async def judge(self, query: str, facts: str, draft: str) -> tuple[dict, dict]:
         system = ("당신은 장애 대응 보고서 검수자다. '수집된 사실'과 '답변'을 비교하라. "
                   "답변이 수집된 사실에 없는 시스템 상태나 수치를 단정하거나, 사실과 반대되는 진단을 하면 "
-                  "grounded=false다. 사실을 요약·인용하고 일반적인 조치 절차를 덧붙이는 것은 grounded=true다. "
+                  "grounded=false다. 사실을 요약·인용하고 runbook 본문의 조치나 일반적인 조치 절차를 덧붙이는 것은 grounded=true다. "
                   "reason에는 한국어 한 문장으로 근거를 쓴다.")
         user = f"## 사용자 요청\n{query}\n\n## 수집된 사실\n{facts}\n\n## 답변\n{draft}"
         content, usage = await self._chat(system, user, schema=JUDGE_SCHEMA)

@@ -516,3 +516,10 @@ def test_n6_plan_ignores_model_systems_not_in_query(monkeypatch):
     monkeypatch.setattr(llm, "_chat", fake_chat(json.dumps({"needs_analysis": False, "tasks": many})))
     result, _ = asyncio.run(llm.plan("web-01 장애 " + "로그 " * 50, "절차"))
     assert [t["target"] for t in result["tasks"] if t["agent"] == "research"] == ["web-01"]
+
+
+def test_n9_judge_facts_include_runbook_body():
+    # [N9 AFTER] Before: runbook 제목 한 줄만 judge에게 줘서, runbook에 있는 조치를 '근거 없음'으로 오반려
+    from agent.graph import _facts_text
+    body = "# CPU Spike 대응 절차\n1. 프로세스 확인\n2. 오토스케일링 그룹에 인스턴스 1대 추가"
+    assert "인스턴스 1대 추가" in _facts_text([{"source": "runbook", "data": body}])

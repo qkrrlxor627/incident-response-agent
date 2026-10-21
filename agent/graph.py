@@ -433,7 +433,11 @@ def _facts_text(collected: list[dict]) -> str:
             lines.append(f"- 모니터링 {d.get('system_name')}: 상태={d.get('status')}, CPU {d.get('cpu_percent')}%, "
                          f"메모리 {d.get('memory_percent')}%, 알림 {d.get('alerts')}")
         elif c["source"] == "runbook":
-            lines.append(f"- runbook: {d.strip().splitlines()[0] if d.strip() else ''}")
+            # [N9 BEFORE] lines.append(f"- runbook: {d.strip().splitlines()[0] if d.strip() else ''}")
+            #   → judge가 runbook 제목만 봐서, runbook에 있는 조치(인스턴스 추가, 풀 확장)를 '사실에 없음'으로 반려
+            #     (OpenAI gpt-4o judge에서 4/24건 오반려. Ollama 8b judge는 관대해서 드러나지 않았다)
+            # [N9 AFTER] write 단계가 받은 runbook 본문을 judge에게도 그대로 준다 (최대 1500자)
+            lines.append(f"- runbook 본문:\n{d.strip()[:1500]}")
         elif c["source"] in ("note", "analysis"):
             lines.append(f"- {c['source']}: {d}")
     return "\n".join(lines) or "(수집된 사실 없음)"

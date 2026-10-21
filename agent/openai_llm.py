@@ -117,7 +117,8 @@ class OpenAILLM:
         """[P11 AFTER] ollama_llm.OllamaLLM.judge와 같은 역할 (JSON 모드)."""
         system = ("당신은 장애 대응 보고서 검수자다. '수집된 사실'과 '답변'을 비교하라. "
                   "답변이 수집된 사실에 없는 시스템 상태나 수치를 단정하거나 사실과 반대되는 진단을 하면 "
-                  "grounded=false다. JSON 객체로만 응답하라. 스키마: "
+                  "grounded=false다. runbook 본문에 있는 조치를 안내하는 것은 근거가 있는 것이다. "
+                  "reason은 한국어 한 문장으로 쓴다. JSON 객체로만 응답하라. 스키마: "
                   '{"grounded": boolean, "reason": string}')
         user = f"## 사용자 요청\n{query}\n\n## 수집된 사실\n{facts}\n\n## 답변\n{draft}"
         content, usage = await self._chat(system, user, json_mode=True)
