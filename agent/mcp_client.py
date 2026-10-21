@@ -22,6 +22,18 @@ from langsmith import traceable
 from mcp import ClientSession, StdioServerParameters
 from mcp.client.stdio import stdio_client
 
+from .errors import ToolError
+
+try:   # mcp SDK 2.x는 MCPError, 1.x는 McpError — 설치된 버전과 무관하게 잡는다
+    from mcp.shared.exceptions import MCPError
+except ImportError:   # pragma: no cover
+    from mcp.shared.exceptions import McpError as MCPError
+
+# ── [P5 AFTER] MCP 호출 1건의 시간 제한 ──
+#    Before: 시간 제한이 없었다 → MCP 서버가 멈추면 요청도 같이 멈췄다.
+#    로컬 stdio 서버의 정상 응답은 수 ms라 10초면 충분하다 (환경변수 MCP_TIMEOUT으로 조정).
+MCP_TIMEOUT = float(os.environ.get("MCP_TIMEOUT", "10"))
+
 SERVER_DIR = Path(__file__).parent.parent
 DEFAULT_SERVER_SCRIPTS = {
     "ops": SERVER_DIR / "mcp_server.py",
@@ -67,19 +79,41 @@ class MCPClient:
             self._stack = None
             self.sessions = {}
 
+    async def _call(self, what: str, coro_fn):
+        """[P5 AFTER] 모든 MCP 요청이 지나가는 관문: 시간 제한 + 예외를 '재시도 가능 여부'로 번역.
+
+        - 시간 초과(asyncio.wait_for)        → TimeoutError        → with_retry가 재시도
+        - SDK의 시간 초과(MCPError, "timed out") → TimeoutError        → 재시도 (Before: 재시도 안 됨)
+        - 그 밖의 MCPError(잘못된 인자 등)     → ToolError(recoverable=False) → 즉시 실패
+        - 연결이 끊김(서버 프로세스 종료)       → ToolError(recoverable=True)
+        """
+        try:
+            async with self._lock:   # stdio 세션 하나를 공유하므로 한 번에 한 요청씩 (Before와 같음)
+                return await asyncio.wait_for(coro_fn(), timeout=MCP_TIMEOUT)
+        except asyncio.TimeoutError:
+            raise TimeoutError(f"MCP {what}: {MCP_TIMEOUT}s 안에 응답 없음") from None
+        except MCPError as e:
+            if "timed out" in str(e).lower():
+                raise TimeoutError(f"MCP {what}: {e}") from e
+            raise ToolError("MCP_ERROR", f"MCP {what}: {e}", recoverable=False) from e
+        except (ConnectionError, EOFError, BrokenPipeError) as e:
+            raise ToolError("MCP_DISCONNECTED", f"MCP {what}: 연결 끊김 ({e})", recoverable=True) from e
+
     @traceable(run_type="tool", name="mcp.call_tool")
     async def call_tool(self, name: str, arguments: dict, server: str = "ops") -> dict:
         if self._flaky_pending and name == "get_monitoring_status":
             self._flaky_pending = False
             raise asyncio.TimeoutError("simulated transient timeout (Wave 9 demo)")
-        async with self._lock:
-            result = await self.sessions[server].call_tool(name, arguments)
+        # [P5 BEFORE] async with self._lock:
+        # [P5 BEFORE]     result = await self.sessions[server].call_tool(name, arguments)   ← 시간 제한 없음
+        result = await self._call(f"call_tool({name})",
+                                  lambda: self.sessions[server].call_tool(name, arguments))
         return json.loads(result.content[0].text)
 
     @traceable(run_type="tool", name="mcp.list_resource_templates")
     async def list_resource_templates(self, server: str) -> list:
-        async with self._lock:
-            result = await self.sessions[server].list_resource_templates()
+        result = await self._call("list_resource_templates",   # [P5 AFTER] 시간 제한
+                                  lambda: self.sessions[server].list_resource_templates())
         return _attr(result, "resourceTemplates", "resource_templates")
 
     @traceable(run_type="tool", name="mcp.find_resource_template")
@@ -95,14 +129,15 @@ class MCPClient:
 
     @traceable(run_type="tool", name="mcp.read_resource")
     async def read_resource(self, uri: str, server: str) -> str:
-        async with self._lock:
-            result = await self.sessions[server].read_resource(uri)
+        # [P5 BEFORE] async with self._lock:
+        # [P5 BEFORE]     result = await self.sessions[server].read_resource(uri)
+        result = await self._call(f"read_resource({uri})",
+                                  lambda: self.sessions[server].read_resource(uri))
         return result.contents[0].text
 
     @traceable(run_type="tool", name="mcp.list_prompts")
     async def list_prompts(self, server: str) -> list:
-        async with self._lock:
-            result = await self.sessions[server].list_prompts()
+        result = await self._call("list_prompts", lambda: self.sessions[server].list_prompts())   # [P5 AFTER]
         return result.prompts
 
     @traceable(run_type="tool", name="mcp.find_prompt")
@@ -117,6 +152,6 @@ class MCPClient:
 
     @traceable(run_type="tool", name="mcp.get_prompt")
     async def get_prompt(self, name: str, arguments: dict, server: str = "ops") -> str:
-        async with self._lock:
-            result = await self.sessions[server].get_prompt(name, arguments)
+        result = await self._call(f"get_prompt({name})",   # [P5 AFTER]
+                                  lambda: self.sessions[server].get_prompt(name, arguments))
         return result.messages[0].content.text

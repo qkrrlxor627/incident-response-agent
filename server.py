@@ -18,12 +18,13 @@ from dotenv import load_dotenv
 load_dotenv()   # LANGCHAIN_TRACING_V2 / API_KEY / PROJECT — import보다 먼저
 
 from fastapi import FastAPI
-from fastapi.responses import StreamingResponse
+from fastapi.responses import JSONResponse, StreamingResponse
 from langsmith import traceable
 from langsmith.run_helpers import get_current_run_tree
 from pydantic import BaseModel
 
 from agent.deps import SupervisorDeps
+from agent.errors import classify
 from agent.fake_llm import FastLLM, QualityLLM
 from agent.graph import build_graph
 from agent.mcp_client import MCPClient
@@ -33,6 +34,7 @@ from agent.supervisor_v1 import run_v1
 # [P9 AFTER] agent.* 로거의 JSON 한 줄 로그(노드별 elapsed_ms)를 서버 터미널에 출력한다
 logging.basicConfig(level=logging.WARNING, format="%(asctime)s %(name)s %(message)s")
 logging.getLogger("agent").setLevel(logging.INFO)
+log = logging.getLogger("agent.server")
 
 CREATION_COUNT = 0   # Wave 1 — 프로세스 내 Agent 번들 생성 횟수 (항상 1이어야 정상)
 
@@ -146,7 +148,15 @@ async def _handle_chat(message: str, thread_id: str) -> tuple[dict, str | None]:
 
 @app.post("/chat")
 async def chat(req: ChatRequest):
-    result, run_id = await _handle_chat(req.message, req.thread_id)
+    # [P6 BEFORE] 예외가 나면 FastAPI 기본 500 "Internal Server Error" (원인·재시도 가능 여부 없음)
+    # result, run_id = await _handle_chat(req.message, req.thread_id)
+    # [P6 AFTER] 에러를 분류해 503 + {code, recoverable, message}로 돌려준다
+    try:
+        result, run_id = await _handle_chat(req.message, req.thread_id)
+    except Exception as exc:
+        err = classify(exc)
+        log.warning(json.dumps({"event": "chat_failed", "thread_id": req.thread_id, **err}, ensure_ascii=False))
+        return JSONResponse({"error": err}, status_code=503)
     return {"reply": result["final"], "events": result.get("events", []),
             "metadata": _metadata(result, run_id)}
 
@@ -160,7 +170,19 @@ async def chat_stream(message: str, thread_id: str = "default"):
     """
     deps = app.state.deps
 
+    # [P6 BEFORE] gen() 안에서 예외가 나면 스트림이 그냥 끊겼다 → 브라우저는 onerror만 받고 조용히 멈춤 (S6)
+    # [P6 AFTER] 실제 작업은 _events()에 두고, gen()이 감싸서 예외를 Error 이벤트로 바꾼 뒤 [DONE]까지 보낸다
     async def gen():
+        try:
+            async for chunk in _events():
+                yield chunk
+        except Exception as exc:
+            err = classify(exc)   # {code, recoverable, message} — agent/errors.py
+            log.warning(json.dumps({"event": "stream_failed", "thread_id": thread_id, **err}, ensure_ascii=False))
+            yield f"data: {json.dumps({'type': 'Error', **err}, ensure_ascii=False)}\n\n"
+        yield "data: [DONE]\n\n"   # 성공이든 실패든 항상 끝 신호를 보낸다 → 화면이 '전송 중'에 갇히지 않는다
+
+    async def _events():
         history = deps.session_store.load(thread_id)
         if deps.version != "v2":
             result = await run_v1(deps, message, thread_id, history)
@@ -195,7 +217,6 @@ async def chat_stream(message: str, thread_id: str = "default"):
             yield f"data: {json.dumps({'type': 'FinalAnswer', 'reply': final, 'prompt': last_prompt}, ensure_ascii=False)}\n\n"
             deps.session_store.append(thread_id, "user", message)
             deps.session_store.append(thread_id, "assistant", final)
-        yield "data: [DONE]\n\n"
 
     return StreamingResponse(gen(), media_type="text/event-stream")
 

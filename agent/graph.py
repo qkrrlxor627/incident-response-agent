@@ -21,6 +21,7 @@ from langgraph.graph import END, StateGraph
 from langsmith import traceable
 
 from .deps import SupervisorDeps
+from .errors import classify
 from .retry import with_retry
 
 
@@ -53,6 +54,10 @@ def _extract_system_name(query: str) -> str:
     → 다른 MCP 클라이언트와의 호환성을 깨지 않는다 (트레이드오프: 타입이 list가 아니라 문자열).
     """
     return ", ".join(mentioned_systems(query)) or DEFAULT_SYSTEM
+
+
+RESEARCH_CONCURRENCY = 4   # [P6 AFTER] research 동시 실행 상한
+log = logging.getLogger("agent.graph")   # [P9 AFTER] JSON 한 줄 로그 (server.py가 INFO로 출력)
 
 
 class AgentState(TypedDict, total=False):
@@ -178,17 +183,34 @@ async def research_node(state: AgentState, deps: SupervisorDeps) -> dict:
         runbook_server, runbook_uri_template = await deps.mcp.find_resource_template(
             "get_incident_runbook")
 
+    # ── [P6 BEFORE] 예외 격리 없이 gather → task 하나가 실패하면 gather 전체가 예외 → 요청 전체 실패 ──
+    # async def run_one(idx: int) -> dict:
+    #     ...
+    #     data = await deps.mcp.read_resource(uri, server=runbook_server)   ← [P5 BEFORE] runbook은 재시도 없음
+    #     return {"idx": idx, "source": "runbook", "data": data, "retries": 0}
+    # results = await asyncio.gather(*(run_one(i) for i in research_indices))
+    # ── [P6 AFTER] 코루틴마다 try/except로 격리 → 성공한 것만 모아 '부분 응답'을 만든다 (K10·K12) ──
+    sem = asyncio.Semaphore(RESEARCH_CONCURRENCY)   # 동시 실행 상한 (MCP 서버 과부하 방지)
+
     async def run_one(idx: int) -> dict:
         task = tasks[idx]
-        await asyncio.sleep(0.35)   # 태스크당 고정 지연 — 병렬 효과를 실측하기 위함
-        if task["kind"] == "monitoring":
-            data, retries = await with_retry(
-                deps.mcp.call_tool, "get_monitoring_status",
-                {"system_name": task["target"]})
-            return {"idx": idx, "source": "monitoring", "data": data, "retries": retries}
-        uri = runbook_uri_template.format(incident_type=task["target"])
-        data = await deps.mcp.read_resource(uri, server=runbook_server)
-        return {"idx": idx, "source": "runbook", "data": data, "retries": 0}
+        async with sem:
+            await asyncio.sleep(0.35)   # 태스크당 고정 지연 — 병렬 효과를 실측하기 위함
+            try:
+                if task["kind"] == "monitoring":
+                    data, retries = await with_retry(
+                        deps.mcp.call_tool, "get_monitoring_status",
+                        {"system_name": task["target"]})
+                    return {"idx": idx, "source": "monitoring", "data": data, "retries": retries}
+                uri = runbook_uri_template.format(incident_type=task["target"])
+                # [P5 AFTER] runbook(Resource) 읽기도 재시도한다
+                data, retries = await with_retry(deps.mcp.read_resource, uri, server=runbook_server)
+                return {"idx": idx, "source": "runbook", "data": data, "retries": retries}
+            except Exception as exc:   # 재시도까지 실패한 경우 — 이 task만 실패로 표시하고 나머지는 계속
+                err = classify(exc)
+                log.warning(json.dumps({"event": "task_failed", "task": task["id"],
+                                        "target": task.get("target"), **err}, ensure_ascii=False))
+                return {"idx": idx, "source": task["kind"], "error": err, "retries": 0}
 
     started = time.perf_counter()
     results = await asyncio.gather(*(run_one(i) for i in research_indices))
@@ -198,6 +220,15 @@ async def research_node(state: AgentState, deps: SupervisorDeps) -> dict:
     collected = list(state.get("collected", []))
     events = list(state["events"])
     for r in results:
+        if "error" in r:   # [P6 AFTER] 실패한 task: 상태 failed + TaskFailed 이벤트, 수집 결과에는 넣지 않는다
+            new_tasks[r["idx"]]["status"] = "failed"
+            collected.append({"source": "note", "data":
+                              f"{new_tasks[r['idx']]['target']} 조회 실패({r['error']['code']}) — "
+                              "이 시스템의 수치는 없으므로 추정하지 말고 조회 실패 사실을 알려라."})
+            events.append({"type": "TaskFailed", "id": new_tasks[r["idx"]]["id"],
+                           "source": r["source"], "target": new_tasks[r["idx"]]["target"],
+                           "code": r["error"]["code"], "recoverable": r["error"]["recoverable"]})
+            continue
         new_tasks[r["idx"]]["status"] = "done"
         collected.append({"source": r["source"], "data": r["data"]})
         retry_total += r["retries"]
@@ -263,10 +294,13 @@ def _classify_incident_type(collected: list[dict]) -> str | None:
 def _no_runbook_note(query: str, collected: list[dict]) -> str:
     """runbook을 붙이지 않을 때 write 단계에 넘길 '사실' 한 줄 (모델이 지어내지 않게 이유를 명시)."""
     missing = unmonitored_systems(query)
+    names = [c["data"].get("system_name") for c in collected if c.get("source") == "monitoring"]
+    if not names and any(c.get("source") == "note" and "조회 실패" in c["data"] for c in collected):
+        # [P6 AFTER] 조회가 실패해서 데이터가 없는 것을 '정상'으로 착각하지 않는다
+        return "모니터링 조회가 실패해 장애 유형을 판단할 수 없다. 원인을 단정하지 말고 재시도를 안내하라."
     if missing:
         return (f"{', '.join(missing)}는 모니터링 대상(data/monitoring.json)에 없는 시스템이다. "
                 "상태를 조회할 수 없으므로 수치를 추정하지 말고, 모니터링 등록이 필요하다고 안내하라.")
-    names = [c["data"].get("system_name") for c in collected if c.get("source") == "monitoring"]
     return (f"조사한 시스템({', '.join(n for n in names if n)})은 모두 정상이고 활성 알림이 없다. "
             "장애 유형을 단정하지 말고 '현재 이상 징후 없음'과 추가 확인 방법을 안내하라.")
 
@@ -375,7 +409,6 @@ def _after_validate(state: AgentState) -> str:
     return "finalize" if state.get("validation_feedback") is None else "write"
 
 
-log = logging.getLogger("agent.graph")
 
 
 def _timed(name: str, fn):

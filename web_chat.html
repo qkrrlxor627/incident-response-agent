@@ -40,6 +40,10 @@
   }
   .row.user .bubble { background: #5b5bd6; color: white; border-bottom-right-radius: 4px; }
   .row.agent .bubble { background: #2e2e42; border-bottom-left-radius: 4px; }
+  /* [P6 AFTER] 오류 말풍선 — Before에는 오류가 나도 화면에 아무 표시가 없었다(S6) */
+  .row.error .bubble { background: #4a1e24; border: 1px solid #c9505d; color: #ffd7dc; border-bottom-left-radius: 4px; }
+  .row.error .code { font-size: 11px; color: #ff9aa6; margin-top: 4px; }
+  .row.error button { margin-top: 8px; padding: 6px 12px; font-size: 12px; background: #c9505d; }
   .steps {
     max-width: 70%; font-size: 12px; color: #9a9ac0; padding: 6px 14px;
     display: flex; flex-direction: column; gap: 3px;
@@ -94,6 +98,14 @@
         <div class="bubble">{{ item.text }}</div>
       </div>
 
+      <!-- [P6 AFTER] 서버가 보낸 Error 이벤트 / 연결 끊김을 빨간 말풍선으로 보여준다 -->
+      <div v-else-if="item.kind === 'error'" class="row error">
+        <div class="bubble">⚠️ {{ item.text }}
+          <div class="code">오류 코드: {{ item.code }} · {{ item.recoverable ? '잠시 후 다시 시도하면 될 수 있음' : '다시 시도해도 같은 결과' }}</div>
+          <button v-if="item.recoverable && item.question" type="button" :disabled="sending" @click="retry(item.question)">다시 시도</button>
+        </div>
+      </div>
+
       <details v-else-if="item.kind === 'prompt'" class="prompt-box">
         <summary>LLM에 전달된 최종 프롬프트 보기</summary>
         <pre>{{ item.text }}</pre>
@@ -117,6 +129,8 @@ const { createApp, ref, reactive, nextTick } = Vue;
 const STEP_LABELS = {
   PlanCreated: e => `계획 수립: 할 일 ${e.task_count}가지${e.targets?.length ? ` (시스템: ${e.targets.join(', ')})` : ''}`,
   GateApplied: e => e.removed_analysis_tasks ? `불필요한 작업 ${e.removed_analysis_tasks}건 제거` : null,
+  // [P6 AFTER] 조사 1건이 실패해도 나머지로 답한다(부분 응답) → 어떤 조사가 실패했는지 단계에 보여준다
+  TaskFailed: e => `⚠ 조회 실패 (${e.target}, ${e.code}) — 나머지 결과로 계속`,
   TaskCompleted: e => (e.source === 'monitoring'
       ? `모니터링 지표 확인 (시스템: ${e.target})`
       : `대응 매뉴얼(runbook) 조회 (장애유형: ${e.target})`) + (e.retries ? ' (재시도 성공)' : ''),
@@ -146,7 +160,15 @@ createApp({
     }
 
     function onSubmit() {
-      const text = input.value.trim();
+      send(input.value.trim());
+    }
+
+    // [P6 AFTER] '다시 시도' 버튼 — 같은 질문을 다시 보낸다
+    function retry(question) {
+      send(question);
+    }
+
+    function send(text) {
       if (!text) return;
 
       log.value.push({ id: nextId++, kind: 'user', text });
@@ -161,10 +183,11 @@ createApp({
       const url = `/chat/stream?message=${encodeURIComponent(text)}&thread_id=${encodeURIComponent(thread)}`;
       const es = new EventSource(url);
       let streamItem = null;
+      let finished = false;   // [P6 AFTER] [DONE]을 받았는지 — 못 받고 끊기면 연결 오류로 표시
       let streamAttempt = null;   // write_node 재작성(attempt 증가) 시 새 말풍선으로 끊는다
 
       es.onmessage = (event) => {
-        if (event.data === '[DONE]') { es.close(); sending.value = false; return; }
+        if (event.data === '[DONE]') { finished = true; es.close(); sending.value = false; return; }
         let e;
         try { e = JSON.parse(event.data); } catch { return; }
 
@@ -192,6 +215,14 @@ createApp({
           return;
         }
 
+        // [P6 AFTER] 서버가 보낸 오류 이벤트 {code, recoverable, message}
+        if (e.type === 'Error') {
+          log.value.push({ id: nextId++, kind: 'error', text: e.message, code: e.code,
+                           recoverable: e.recoverable, question: text });
+          scrollToBottom();
+          return;
+        }
+
         const fn = STEP_LABELS[e.type];
         if (!fn) return;
         const label = fn(e);
@@ -200,10 +231,19 @@ createApp({
         scrollToBottom();
       };
 
-      es.onerror = () => { es.close(); sending.value = false; };
+      // [P6 BEFORE] es.onerror = () => { es.close(); sending.value = false; };   ← 조용히 끝남
+      es.onerror = () => {
+        es.close();
+        sending.value = false;
+        if (!finished) {   // [P6 AFTER] [DONE] 전에 끊겼으면 사용자에게 알린다
+          log.value.push({ id: nextId++, kind: 'error', text: '서버와의 연결이 끊겼습니다.',
+                           code: 'STREAM_DISCONNECTED', recoverable: true, question: text });
+          scrollToBottom();
+        }
+      };
     }
 
-    return { backendLabel, log, input, sending, logEl, onSubmit };
+    return { backendLabel, log, input, sending, logEl, onSubmit, retry };
   },
 }).mount('#app');
 </script>

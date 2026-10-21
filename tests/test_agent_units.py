@@ -202,3 +202,100 @@ def test_timed_wrapper_records_elapsed_ms():
         return {"events": []}
     out = asyncio.run(_timed("demo", node)({"timings": {"demo": 5}}))
     assert out["timings"]["demo"] >= 5   # 같은 노드가 다시 돌면 누적된다
+
+
+# ── P5: MCP 시간 제한·재시도 ─────────────────────────────────────────────
+def test_with_retry_retries_timeout_and_recoverable_tool_error():
+    from agent.errors import ToolError
+    from agent.retry import with_retry
+    calls = []
+
+    async def flaky():
+        calls.append(1)
+        if len(calls) == 1:
+            raise TimeoutError("1st")
+        if len(calls) == 2:
+            raise ToolError("MCP_DISCONNECTED", "2nd", recoverable=True)
+        return "ok"
+    assert asyncio.run(with_retry(flaky, base_delay=0)) == ("ok", 2)
+
+
+def test_with_retry_does_not_retry_permanent_error():
+    from agent.errors import ToolError
+    from agent.retry import with_retry
+    calls = []
+
+    async def bad():
+        calls.append(1)
+        raise ToolError("MCP_ERROR", "invalid", recoverable=False)
+    with pytest.raises(ToolError):
+        asyncio.run(with_retry(bad, base_delay=0))
+    assert len(calls) == 1
+
+
+def test_mcp_sdk_timeout_becomes_retryable_timeout_error():
+    # [P5 AFTER] Before: SDK 시간 초과(MCPError)는 retry.py가 잡지 않아 재시도 0회였다 (S8)
+    from agent.mcp_client import MCPClient, MCPError
+
+    async def sdk_timeout():
+        raise MCPError(code=-32001, message="Request 'tools/call' timed out")
+    with pytest.raises(TimeoutError):
+        asyncio.run(MCPClient()._call("call_tool(x)", sdk_timeout))
+
+
+def test_mcp_call_has_time_limit(monkeypatch):
+    import agent.mcp_client as mod
+    monkeypatch.setattr(mod, "MCP_TIMEOUT", 0.05)
+
+    async def hang():
+        await asyncio.sleep(5)
+    with pytest.raises(TimeoutError):
+        asyncio.run(mod.MCPClient()._call("call_tool(x)", hang))
+
+
+# ── P6: 부분 실패 격리 ────────────────────────────────────────────────────
+class _StubMCP:
+    """auth-service 조회만 항상 실패하는 가짜 MCP (재시도해도 실패)."""
+    async def call_tool(self, name, args):
+        if args["system_name"] == "auth-service":
+            raise TimeoutError("MCP down")
+        return {"system_name": args["system_name"], "status": "healthy", "alerts": []}
+
+
+def test_research_isolates_one_failed_task(monkeypatch):
+    from types import SimpleNamespace
+
+    from agent import graph
+    monkeypatch.setattr(graph.asyncio, "sleep", _no_sleep)
+    tasks = [{"id": "task-0", "agent": "research", "kind": "monitoring", "target": "web-01", "status": "pending"},
+             {"id": "task-1", "agent": "research", "kind": "monitoring", "target": "auth-service", "status": "pending"}]
+    out = asyncio.run(graph.research_node({"tasks": tasks, "events": []}, SimpleNamespace(mcp=_StubMCP())))
+    kinds = [(e["type"], e["target"]) for e in out["events"]]
+    assert ("TaskCompleted", "web-01") in kinds and ("TaskFailed", "auth-service") in kinds   # Before: 전체 예외
+    assert [t["status"] for t in out["tasks"]] == ["done", "failed"]
+
+
+async def _no_sleep(*_):
+    return None
+
+
+def test_stream_sends_error_event_then_done():
+    # [P6 AFTER] Before: 예외가 나면 스트림이 그냥 끊겼다 → 화면이 조용히 멈춤 (S6)
+    from types import SimpleNamespace
+
+    import httpx as _httpx
+    from fastapi.testclient import TestClient
+
+    import server
+
+    class BrokenGraph:
+        async def astream(self, *a, **k):
+            raise _httpx.ConnectError("ollama down")
+            yield  # pragma: no cover
+
+    server.app.state.deps = SimpleNamespace(version="v2", session_store=SimpleNamespace(
+        load=lambda t: [], append=lambda *a: None))
+    server.app.state.graph = BrokenGraph()
+    body = TestClient(server.app).get("/chat/stream", params={"message": "web-01 장애"}).text
+    assert '"type": "Error"' in body and '"code": "LLM_UNAVAILABLE"' in body
+    assert body.rstrip().endswith("data: [DONE]")

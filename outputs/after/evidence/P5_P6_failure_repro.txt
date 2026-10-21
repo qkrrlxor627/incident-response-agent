@@ -1,0 +1,23 @@
+# P5·P6 After — 장애 재현 (2026-10-21 21:16)
+# 명령: bash outputs/after/scripts/p6_repro.sh
+# (1) Ollama 앞 프록시(cut_proxy.py)를 4초 뒤 끊어 '답변 도중 끊김' 재현 — Before S6은 pkill ollama로 같은 상황을 만들었다
+# (2) 연결할 수 없는 Ollama 주소
+# 참고: research의 TaskCompleted retries=1은 mcp_client.py의 Wave 9 의도적 첫 호출 타임아웃이 재시도로 복구된 것이다
+proxy :11500 → :11434, cut after 4.0s from first connection
+== (1) /chat/stream: 'log-service 디스크 공간이 부족하다는 알림이 왔어요' — 4초 뒤 Ollama 연결 강제 종료 ==
+cutting all connections
+data: {"type": "RouteDecided", "route": "incident", "node": "route", "elapsed_ms": 498}
+data: {"type": "PlanCreated", "task_count": 2, "targets": ["log-service"], "node": "plan", "elapsed_ms": 514}
+data: {"type": "GateApplied", "removed_analysis_tasks": 1, "reason": "research 1개 < 2", "node": "gate", "elapsed_ms": 0}
+data: {"type": "TaskCompleted", "id": "task-0", "source": "monitoring", "target": "log-service", "retries": 1, "node": "research", "elapsed_ms": 917}
+data: {"type": "ReplanCheck", "round": 0, "is_sufficient": false, "gap_task": "task-gap-runbook", "target": "disk-full", "node": "replan_check", "elapsed_ms": 0}
+data: {"type": "TaskCompleted", "id": "task-gap-runbook", "source": "runbook", "target": "disk-full", "retries": 0, "node": "research", "elapsed_ms": 1274}
+data: {"type": "ReplanCheck", "round": 1, "is_sufficient": true, "node": "replan_check", "elapsed_ms": 0}
+data: {"type": "AnalysisSkipped", "reason": "analysis task 0개", "node": "analysis", "elapsed_ms": 0}
+data: {"type": "Error", "code": "LLM_STREAM_BROKEN", "recoverable": true, "message": "답변을 받는 도중 LLM 연결이 끊겼습니다."}
+data: [DONE]
+== 서버 로그 (구조화 로그) ==
+2026-10-21 21:15:57,988 agent.server {"event": "stream_failed", "thread_id": "p6", "code": "LLM_STREAM_BROKEN", "recoverable": true, "message": "답변을 받는 도중 LLM 연결이 끊겼습니다."}
+== (2) /chat: Ollama 주소가 연결 불가(:11999) ==
+{"error":{"code":"LLM_UNAVAILABLE","recoverable":true,"message":"LLM 서버(Ollama)에 연결할 수 없습니다. 실행 중인지 확인해 주세요."}}
+HTTP 503

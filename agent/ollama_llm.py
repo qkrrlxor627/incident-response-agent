@@ -18,7 +18,8 @@ from pathlib import Path
 import httpx
 from langsmith import traceable
 
-OLLAMA_URL = "http://127.0.0.1:11434/api/chat"
+# [P6 AFTER] 환경변수로 바꿀 수 있게 했다 — 장애 재현 때 중간 프록시를 끼워 "답변 도중 끊김"을 만들기 위함
+OLLAMA_URL = os.environ.get("OLLAMA_URL", "http://127.0.0.1:11434/api/chat")
 
 # ── [P9 AFTER] 단계별 시간 제한 (Before: 모든 호출이 timeout=300.0 하나) ──
 #    route·plan·analyze는 짧은 JSON 출력이라 60초면 충분하다. 넘으면 '멈춤'으로 보고 빨리 실패시킨다.
