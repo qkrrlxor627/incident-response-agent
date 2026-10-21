@@ -362,6 +362,38 @@ fake 백엔드와 임시 session DB로 `/chat/stream`을 직접 호출해 확인
 
 ---
 
+## 2026-10-21 (저녁) — 전체 개선 1~7단계 + After 측정
+
+| 단계 | 커밋 | 내용 | 문서 |
+|---|---|---|---|
+| 0 | `14b218b` | 16:11에 다시 돌린 baseline은 `baseline_rerun1021_*`로 따로 보관하고 원본(0.97)을 복원했다 | — |
+| 1 | `0a21f3d` | P1 + #14: `agent/systems.py`, 질문의 시스템을 항상 보충. **실모델 확인: 0.6b가 target에 문장을 넣는 것이 원인**(추정 → 확정) | `outputs/final-report/03_step1_P1.md` |
+| 2 | `6e53fd3` | P2: 이상 시스템 우선 분류, db-down 폴백 제거, 감시 대상이 아니면 조사 안 함 | `04_step2_P2.md` |
+| 3 | `061ed1b` | P3·P4·P9: AsyncClient, 이중 게이트, 단계별 timeout, think:false(토큰 190 → 9 실측), 노드별 elapsed_ms | `05_step3_P3_P4_P9.md` |
+| 4 | `82a08af` | P5·P6: MCP `_call`(timeout + 예외 번역), task 격리, SSE Error 이벤트, 빨간 말풍선 | `06_step4_P5_P6.md` |
+| 5 | `f83b27e` | P7: Pydantic 계약 → 422, SSE 헤더, 질문 선저장, v1 이력 | `07_step5_P7.md` |
+| 6 | `f3b541d` | P11: 규칙 3개 + LLM judge(0.6b vs 8b 실험 후 8b 채택), 재작성 1회 | `08_step6_P11.md` |
+| 7 | `1f8e51d` | E15 비동기 세션 저장소 + 팩토리, P10 v1 롤백(기준 외) | `09_step7_E15_P10.md` |
+| 8 | `83125f4` | After 1차 측정에서 q10 라우팅 회귀 발견(think 끔 부작용) → route 권위 보정 → 2차 측정 | `09b_step8_route_regression.md` |
+
+**After 결과 (2차, `outputs/after/README.md`)**
+
+| 지표 | Before | After |
+|---|---|---|
+| runbook 정답률 | 0.739 | 1.0 |
+| recall | 0.775 | 1.0 |
+| LLM-judge | 0.855 | 0.955 |
+| incident 중앙값 | 36.0초 | 12.8초 |
+| 최대 응답 | 300초 | 24.4초 |
+| 비용 | $0.1637 | $0.1360 |
+
+- pytest: 15 passed + 1 xfailed → **57 passed**
+- 나빠진 것: q04 judge 0.95 → 0.75. q02는 재작성 때문에 22.9초다.
+- 캡처: `outputs/after/captures/`(Before와 같은 파일명), 묶음 `outputs/after/after_evidence.zip`
+- 최종 발표: `outputs/final-report/10_final_presentation.md`
+- 코드 위치 색인: `outputs/final-report/00_code_index.md`
+- 코드에서 `[Px BEFORE]`(주석 처리한 원래 코드)와 `[Px AFTER]`(고친 코드)로 검색하면 바뀐 곳이 모두 나온다.
+
 ## 컴퓨터를 다시 켰을 때 (재시작 절차)
 
 `.venv`, Ollama 모델, `.env`는 디스크에 남아 있다. 그래서 다시 설치할 필요는 없고, **프로세스만 다시 띄우면 된다.**
@@ -437,10 +469,6 @@ claude --continue                  # 마지막 대화를 그대로 이어서 연
 
 ## 다음에 할 작업
 
-- [ ] **문제 1번(여러 시스템 중 1개만 조사)을 고치고 After를 측정한다**
-  1. `/improve v1`을 실행해 개선안을 만들고, P1이 이 문제인지 확인한다.
-  2. `agent/ollama_llm.py`의 `plan()`이 모델 task와 별개로 쿼리에 나온 KNOWN_SYSTEMS를 전부 research task로 보충하게 한다.
-  3. 고치면 auto pytest hook이 자동으로 돈다. xfail이던 P1 테스트가 XPASS로 바뀌면 `@pytest.mark.xfail` 마커를 지운다(단위 테스트 C3-g, ⑦ 재발 방지).
-  4. `/bench after`를 실행해 측정하고 `before.md`와 비교한다. q04~q06의 조사 시스템, q05의 db-down 오분류를 본다.
-     - 주의: 여러 시스템의 alerts가 합쳐지면 규칙 순서 때문에 분류가 달라질 수 있다(예: q04 → cpu-spike).
-  5. 결과를 `doc/presentation_k.md`의 `【After 측정 후 기입】` 칸에 채운다.
+- [x] 문제 1~11 개선 + After 측정 (2026-10-21 저녁, 위 표)
+- [ ] 발표 리허설: `outputs/final-report/01_problem_recognition.md` → `10_final_presentation.md` 순서로 5분
+- [ ] (선택) 한계 항목: 시스템 별칭 사전, LangGraph checkpointer, 새 질문 유형으로 과적합 확인

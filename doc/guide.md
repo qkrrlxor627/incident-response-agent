@@ -1314,3 +1314,46 @@ lsof -ti:8100 | xargs kill -9 && bash sh/run_agent_ollma.sh    # v2로 되돌리
 cd outputs && zip -r before/before_evidence.zip before -x 'before/before_evidence.zip' && cd ..
 lsof -ti:8100,8600 | xargs kill -9 2>/dev/null; pkill -f "ollama serve"   # 끝나면 종료
 ```
+
+---
+
+## After 측정 — 직접 실행할 때의 터미널 명령 (2026-10-21)
+
+> 산출물: `outputs/after/` (captures/·evidence/·scripts/), 비교표 `outputs/after/README.md`, 단계별 문서 `outputs/final-report/03~10`
+> Before와 같은 조건(ollama, qwen3:0.6b/8b, v2, queries.json 10건 × 3회)이다.
+
+```bash
+# 0) 서버 — Before와 같다 (터미널 1: ollama serve / 2: bash sh/run_agent_ollma.sh / 3: bash sh/run_frontend.sh)
+./.venv/bin/python3 -m pytest tests -q                              # 57 passed
+
+# 1) 성능·정확도
+./.venv/bin/python3 bench/run_baseline.py --repeat 3 --tag after     # 약 6분 → bench/results/after_raw.jsonl, after_summary.csv
+./.venv/bin/python3 bench/rescore.py --tag after                     # 정답률·recall (서버 불필요)
+set -a; source .env; set +a
+cd bench && ../.venv/bin/python3 -W ignore eval_langsmith.py --prefix after; cd ..   # 약 10분, judge 점수
+
+# 2) 화면 캡처 (Before와 같은 파일명, 캡처용 venv: python3 -m venv /tmp/capvenv && /tmp/capvenv/bin/pip install playwright==1.47.0)
+/tmp/capvenv/bin/python outputs/before/scripts/ui_capture.py outputs/after/captures/S1_q05_multi_system_db_down.png \
+  "web-01 CPU 급증, auth-service 커넥션 풀도 같이 확인해줘" --probe-health outputs/after/evidence/S5_health_during_q05.txt
+/tmp/capvenv/bin/python outputs/before/scripts/ui_capture.py outputs/after/captures/S2_q06_only_one_system.png \
+  "payments-service랑 cache-service 둘 다 저하됐는데 공통 원인이 있는지 분석해줘"
+/tmp/capvenv/bin/python outputs/after/scripts/code_capture_after.py "$PWD" outputs/after/captures/code
+/tmp/capvenv/bin/python outputs/before/scripts/term_render.py outputs/after/captures/terminal outputs/after/evidence/*.txt
+
+# 3) S6 — Ollama는 끄지 않고 중간 프록시를 끊는다 (터미널 2의 서버를 잠시 교체)
+lsof -ti:8100 | xargs kill -9
+python3 outputs/after/scripts/cut_proxy.py --listen 11500 --target 11434 --cut-after 6 &
+(set -a; source .env; set +a; OLLAMA_URL=http://127.0.0.1:11500/api/chat LLM_BACKEND=ollama ./.venv/bin/python3 server.py &)
+/tmp/capvenv/bin/python outputs/before/scripts/ui_capture.py outputs/after/captures/S6_ollama_down_silent_failure.png \
+  "log-service 디스크 공간이 부족하다는 알림이 왔어요"
+
+# 4) S9 — v1 롤백
+lsof -ti:8100 | xargs kill -9
+(set -a; source .env; set +a; LLM_BACKEND=ollama SUPERVISOR_VERSION=v1 ./.venv/bin/python3 server.py &)
+/tmp/capvenv/bin/python outputs/before/scripts/ui_capture.py outputs/after/captures/S9_v1_no_monitoring.png "web-01 장애 진단해줘"
+lsof -ti:8100 | xargs kill -9 && bash sh/run_agent_ollma.sh        # v2로 되돌리기
+
+# 5) 단계별 검증을 서버(8100)와 별개로 다시 해 보기 — :8199에 실모델 서버를 따로 띄운다
+bash outputs/after/scripts/realserver.sh ./.venv/bin/python3 outputs/after/scripts/ask.py "billing-service 응답이 느려요"
+bash outputs/after/scripts/p6_repro.sh
+```
