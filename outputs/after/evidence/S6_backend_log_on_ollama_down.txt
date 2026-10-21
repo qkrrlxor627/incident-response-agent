@@ -1,0 +1,2 @@
+$ (서버 터미널) OLLAMA_URL=http://127.0.0.1:11500/api/chat python3 server.py   # cut_proxy.py가 6초 뒤 Ollama 연결을 끊음
+2026-10-21 21:48:22,425 agent.server {"event": "stream_failed", "thread_id": "t-web-uyh01x", "code": "LLM_STREAM_BROKEN", "recoverable": true, "message": "답변을 받는 도중 LLM 연결이 끊겼습니다."}

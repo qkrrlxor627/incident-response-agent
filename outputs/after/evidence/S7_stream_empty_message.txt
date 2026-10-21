@@ -1,0 +1,14 @@
+$ curl -sS -i 'http://localhost:8100/chat/stream?message=&thread_id=t-empty' | head -8
+HTTP/1.1 422 Unprocessable Entity
+date: Wed, 21 Oct 2026 12:47:49 GMT
+server: uvicorn
+content-length: 148
+content-type: application/json
+
+{"detail":[{"type":"string_too_short","loc":["query","message"],"msg":"String should have at least 1 character","input":"","ctx":{"min_length":1}}]}
+$ curl -sS -o /dev/null -w '%{http_code}' -X POST localhost:8100/chat -d '{"message":""}'
+422
+$ curl -sS -D - -o /dev/null 'localhost:8100/chat/stream?message=web-01%20장애%20진단' | grep -i 'cache-control\|x-accel\|content-type'
+cache-control: no-cache
+x-accel-buffering: no
+content-type: text/event-stream; charset=utf-8

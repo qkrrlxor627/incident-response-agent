@@ -1,0 +1,4 @@
+# After q01 3회 — Before S11: 1회차가 analyze 300.07초 ReadTimeout으로 실패(314.9초)
+rep 1: ok=True 12.6s | GateApplied removed=1 reason=research 1개 < 2 | analysis 실행=False
+rep 2: ok=True 12.4s | GateApplied removed=1 reason=research 1개 < 2 | analysis 실행=False
+rep 3: ok=True 12.7s | GateApplied removed=1 reason=research 1개 < 2 | analysis 실행=False

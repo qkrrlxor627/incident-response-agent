@@ -1,0 +1,11 @@
+query_id,runs,success_rate,ms_median,ms_p95,route,incident_type,runbook,monitored_systems,retry_total,validation_attempts_median,expected_route,expected_incident_type,llm_backend,fast_llm,quality_llm,started_at
+q01,3,1.0,12596,12684,"[('incident', 3)]","[('cpu-spike', 3)]","[('cpu-spike', 3)]","[('payments-service', 3)]",0,1,incident,,ollama,ollama:qwen3:0.6b,ollama:qwen3:8b,2026-10-21T21:33:06+09:00
+q02,3,1.0,22893,24400,"[('incident', 3)]","[('memory-leak', 3)]","[('memory-leak', 3)]","[('cache-service', 3)]",0,2,incident,,ollama,ollama:qwen3:0.6b,ollama:qwen3:8b,2026-10-21T21:33:06+09:00
+q03,3,1.0,11422,11752,"[('incident', 3)]","[('disk-full', 3)]","[('disk-full', 3)]","[('log-service', 3)]",0,1,incident,,ollama,ollama:qwen3:0.6b,ollama:qwen3:8b,2026-10-21T21:33:06+09:00
+q04,3,1.0,11185,13890,"[('incident', 3)]","[('network-timeout', 3)]","[('network-timeout', 3)]","[('gateway-service,payments-service', 3)]",0,1,incident,,ollama,ollama:qwen3:0.6b,ollama:qwen3:8b,2026-10-21T21:33:06+09:00
+q05,3,1.0,12908,16676,"[('incident', 3)]","[('high-latency', 3)]","[('high-latency', 3)]","[('web-01,auth-service', 3)]",0,1,incident,,ollama,ollama:qwen3:0.6b,ollama:qwen3:8b,2026-10-21T21:33:06+09:00
+q06,3,1.0,13466,18829,"[('incident', 3)]","[('cpu-spike', 3)]","[('cpu-spike', 3)]","[('payments-service,cache-service', 3)]",0,1,incident,,ollama,ollama:qwen3:0.6b,ollama:qwen3:8b,2026-10-21T21:33:06+09:00
+q07,3,1.0,13843,17304,"[('incident', 3)]","[('high-latency', 3)]","[('high-latency', 3)]","[('auth-service', 3)]",0,1,incident,,ollama,ollama:qwen3:0.6b,ollama:qwen3:8b,2026-10-21T21:33:06+09:00
+q08,3,1.0,8141,8724,"[('incident', 3)]","[('None', 3)]","[('None', 3)]","[('', 3)]",0,1,incident,,ollama,ollama:qwen3:0.6b,ollama:qwen3:8b,2026-10-21T21:33:06+09:00
+q09,3,1.0,307,485,"[('chat', 3)]","[('None', 3)]","[('None', 3)]","[('', 3)]",0,0,chat,,ollama,ollama:qwen3:0.6b,ollama:qwen3:8b,2026-10-21T21:33:06+09:00
+q10,3,1.0,522,575,"[('chat', 3)]","[('None', 3)]","[('None', 3)]","[('', 3)]",0,0,chat,,ollama,ollama:qwen3:0.6b,ollama:qwen3:8b,2026-10-21T21:33:06+09:00

@@ -1,0 +1,5 @@
+# After q05 단계별 소요 시간 (응답 metadata.timings_ms, bench/results/after_raw.jsonl)
+# Before S4: 전체 31.9초 중 write 27.5초(86%)
+rep 1: 전체 16.7s | route 0.15s, plan 0.53s, research 0.72s, analysis 0.09s, write 11.23s, validate 3.93s | write 비중 67%
+rep 2: 전체 12.9s | route 0.14s, plan 0.48s, research 0.73s, analysis 0.10s, write 7.75s, validate 3.69s | write 비중 60%
+rep 3: 전체 12.9s | route 0.14s, plan 0.52s, research 0.72s, analysis 0.09s, write 7.74s, validate 3.62s | write 비중 60%
