@@ -112,8 +112,10 @@ def test_gate_removes_analysis_for_single_system_even_if_model_wants_it():
 
 
 # ── validate (교안 9단원) ───────────────────────────────────────────────
-def run_validate(draft, attempts=0):
-    return asyncio.run(validate_node({"draft": draft, "validation_attempts": attempts, "events": []}, None))
+def run_validate(draft, attempts=0, collected=None, query="장애 확인", deps=None):
+    state = {"query": query, "draft": draft, "validation_attempts": attempts, "events": [],
+             "collected": collected or []}
+    return asyncio.run(validate_node(state, deps))
 
 
 def test_validate_rejects_short_or_unnumbered_draft():
@@ -124,9 +126,45 @@ def test_validate_accepts_numbered_draft():
     assert run_validate("1) 모니터링 확인 2) 커넥션 풀 점검 3) 재발 방지 문서화")["validation_feedback"] is None
 
 
-def test_validate_forces_pass_on_third_attempt():
-    # 실모델 무한 재작성 방지 — 3번째 시도는 내용과 상관없이 통과
-    assert run_validate("짧음", attempts=2)["validation_feedback"] is None
+def test_validate_forces_pass_on_second_attempt():
+    # [P11 AFTER] 재작성은 1회까지 — 2번째 시도는 경고와 함께 통과 (Before: 3번째)
+    out = run_validate("짧음", attempts=1)
+    assert out["validation_feedback"] is None and "상한" in out["events"][-1]["verdict"]
+
+
+def _mon(name, status="degraded"):
+    return {"source": "monitoring", "data": {"system_name": name, "status": status, "cpu_percent": 50,
+                                             "memory_percent": 40, "alerts": []}}
+
+
+def test_validate_rejects_draft_missing_a_researched_system():
+    # [P11 AFTER] 두 시스템을 조사했는데 답이 하나만 다루면 반려 (Before: 형식만 맞으면 합격)
+    out = run_validate("1) web-01 CPU 정상 2) 재시작 3) 문서화",
+                       collected=[_mon("web-01", "healthy"), _mon("auth-service")])
+    assert "auth-service" in out["validation_feedback"]
+
+
+def test_validate_rejects_system_that_was_not_researched():
+    # [P11 AFTER] Before q08: billing-service 질문에 조사하지 않은 auth-service 상태를 단정해도 합격
+    out = run_validate("1) auth-service 커넥션 풀 92%로 지연 2) 풀 확장 3) 모니터링",
+                       query="billing-service 응답이 느려요")
+    assert "auth-service" in out["validation_feedback"]
+
+
+class _Judge:
+    def __init__(self, grounded):
+        self.grounded = grounded
+
+    async def judge(self, query, facts, draft):
+        return {"grounded": self.grounded, "reason": "수치가 사실과 다름"}, {"usd": 0.0}
+
+
+def test_validate_uses_llm_judge_after_rules_pass():
+    from types import SimpleNamespace
+    draft = "1) web-01 CPU 99% 장애 2) 재시작 3) 문서화"
+    bad = run_validate(draft, collected=[_mon("web-01")], deps=SimpleNamespace(quality_llm=_Judge(False)))
+    good = run_validate(draft, collected=[_mon("web-01")], deps=SimpleNamespace(quality_llm=_Judge(True)))
+    assert "사실 불일치" in bad["validation_feedback"] and good["validation_feedback"] is None
 
 
 # ── P1 버그 고정: 여러 시스템을 말해도 1개만 조사 (before.md 3-1) ─────────

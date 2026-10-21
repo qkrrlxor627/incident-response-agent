@@ -11,6 +11,7 @@ incident: plan(MCP Prompt 절차 반영) → gate(권위 게이트) → research
 import asyncio
 import json
 import logging
+import os
 import time
 from functools import partial
 from pathlib import Path
@@ -373,20 +374,78 @@ async def write_node(state: AgentState, deps: SupervisorDeps) -> dict:
                                           "length": len(draft)}]}
 
 
+# ── [P11 BEFORE] 형식만 검사: 30자 이상 + "1)" 포함이면 합격, 3번째는 무조건 통과 ──
+#    → incident 23건 모두 첫 시도 합격(반려 0건). q05 judge 0.6, q08 0.25인 답변도 통과 (S13)
+# @traceable(name="validate_node")
+# async def validate_node(state: AgentState, deps: SupervisorDeps) -> dict:
+#     draft = state["draft"]
+#     attempts = state.get("validation_attempts", 0) + 1
+#     ok = len(draft) >= 30 and "1)" in draft
+#     verdict = "합격" if ok else "불합격"
+#     if not ok and attempts >= 3:   # 실모델 무한 재작성 방지 — 최대 3회 후 통과 처리
+#         ok, verdict = True, "합격(최대 시도 도달 — 통과 처리)"
+#     feedback = None if ok else (f"응답이 너무 짧습니다(...). 절차를 1) 2) 3) 번호로 ...")
+#     ...
+# ── [P11 AFTER] 규칙 검사(코드) + LLM-as-a-Judge(모델) 혼합, 재작성은 1회까지 (K9) ──
+MAX_WRITE_ATTEMPTS = 2   # 최초 1회 + 재작성 1회. Before는 3회 (재작성 1번에 8b 모델 약 8초가 든다)
+# judge를 맡을 모델: "fast_llm"(0.6b, 빠름) 또는 "quality_llm"(8b, 정확). 비교 근거: outputs/after/evidence/P11_judge_model_compare.txt
+JUDGE_LLM = os.environ.get("JUDGE_LLM", "quality_llm")   # 기본 8b: 0.6b는 근거 있는 답을 잘못 반려(4건 중 1건)
+
+
+def _facts_text(collected: list[dict]) -> str:
+    """judge에게 보여줄 '수집된 사실' 요약 — write 단계가 받은 것과 같은 정보."""
+    lines = []
+    for c in collected:
+        d = c["data"]
+        if c["source"] == "monitoring":
+            lines.append(f"- 모니터링 {d.get('system_name')}: 상태={d.get('status')}, CPU {d.get('cpu_percent')}%, "
+                         f"메모리 {d.get('memory_percent')}%, 알림 {d.get('alerts')}")
+        elif c["source"] == "runbook":
+            lines.append(f"- runbook: {d.strip().splitlines()[0] if d.strip() else ''}")
+        elif c["source"] in ("note", "analysis"):
+            lines.append(f"- {c['source']}: {d}")
+    return "\n".join(lines) or "(수집된 사실 없음)"
+
+
+def _rule_problems(query: str, draft: str, collected: list[dict]) -> list[str]:
+    """코드로 확실히 판단할 수 있는 문제만 찾는다. 하나라도 있으면 LLM judge 없이 반려."""
+    problems = []
+    if len(draft) < 30 or "1)" not in draft:   # Before의 형식 검사는 그대로 유지
+        problems.append(f"형식: {len(draft)}자 — 30자 이상, 1) 2) 3) 번호 절차로 작성하세요.")
+    researched = [c["data"].get("system_name") for c in collected if c["source"] == "monitoring"]
+    missing = [s for s in researched if s and s not in draft]
+    if missing:   # 조사한 시스템을 답변에서 빠뜨림 (P1에서 2개 조사해도 답이 1개만 다루면 소용없다)
+        problems.append(f"근거 누락: 조사한 시스템 {', '.join(missing)}의 결과를 답변에 포함하세요.")
+    invented = [s for s in KNOWN_SYSTEMS if s in draft and s not in researched and s not in query]
+    if invented:  # 조사하지도, 질문에 나오지도 않은 시스템을 단정 (Before q08: auth-service 진단)
+        problems.append(f"근거 없음: 조사하지 않은 시스템 {', '.join(sorted(invented))}의 상태를 단정하지 마세요.")
+    return problems
+
+
 @traceable(name="validate_node")
 async def validate_node(state: AgentState, deps: SupervisorDeps) -> dict:
-    """Wave 8 — 코드 기준 검증: 30자 이상 + 절차 번호 포함이어야 합격."""
     draft = state["draft"]
     attempts = state.get("validation_attempts", 0) + 1
-    ok = len(draft) >= 30 and "1)" in draft
+    collected = state.get("collected", [])
+    cost = state.get("cost_usd", 0.0)
+    # 1) 규칙 검사 — 빠르고 결정론적 (LLM 호출 없음)
+    problems = _rule_problems(state["query"], draft, collected)
+    judge = None
+    # 2) 규칙을 통과했을 때만 LLM judge — 규칙이 잡지 못하는 '사실과 다른 진단'을 본다
+    judge_llm = getattr(deps, JUDGE_LLM, None) if deps is not None else None
+    if not problems and hasattr(judge_llm, "judge"):
+        judge, usage = await judge_llm.judge(state["query"], _facts_text(collected), draft)
+        cost = _cost(state, usage)
+        if not judge["grounded"]:
+            problems.append(f"사실 불일치: {judge['reason']}")
+    ok = not problems
     verdict = "합격" if ok else "불합격"
-    if not ok and attempts >= 3:   # 실모델 무한 재작성 방지 — 최대 3회 후 통과 처리
-        ok, verdict = True, "합격(최대 시도 도달 — 통과 처리)"
-    feedback = None if ok else (
-        f"응답이 너무 짧습니다({len(draft)}자, 최소 30자). 절차를 1) 2) 3) 번호로 "
-        f"구체적으로 설명하세요.")
-    event = {"type": "Validation", "attempt": attempts, "verdict": verdict}
-    return {"validation_attempts": attempts, "validation_feedback": feedback,
+    if not ok and attempts >= MAX_WRITE_ATTEMPTS:   # 재작성 1회 상한 — 무한 루프·지연 방지
+        ok, verdict = True, "합격(재작성 상한 도달 — 경고와 함께 통과)"
+    feedback = None if ok else " / ".join(problems)
+    event = {"type": "Validation", "attempt": attempts, "verdict": verdict,
+             "problems": problems, "judge": judge}
+    return {"validation_attempts": attempts, "validation_feedback": feedback, "cost_usd": cost,
             "events": state["events"] + [event]}
 
 

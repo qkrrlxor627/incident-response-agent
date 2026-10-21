@@ -20,6 +20,15 @@ class FakeLLM:
                 "usd": round(tokens / 1000 * self.usd_per_1k, 6)}
 
 
+    @traceable(run_type="llm", name="fake.judge")
+    async def judge(self, query: str, facts: str, draft: str) -> tuple[dict, dict]:
+        """[P11 AFTER] 결정론 judge — 답변에 수집된 시스템 이름이 모두 있으면 grounded."""
+        names = re.findall(r"모니터링 (\S+):", facts)
+        ok = all(n in draft for n in names)
+        verdict = {"grounded": ok, "reason": "수집된 시스템을 모두 인용" if ok else "수집된 시스템 누락"}
+        return verdict, self._usage(facts + draft, str(verdict))
+
+
 class FastLLM(FakeLLM):
     """분류·계획 등 짧고 정형적인 단계 전담 (저비용)."""
 

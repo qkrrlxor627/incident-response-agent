@@ -112,6 +112,23 @@ class OpenAILLM:
         return content, usage
 
 
+    @traceable(run_type="llm", name="openai.judge")
+    async def judge(self, query: str, facts: str, draft: str) -> tuple[dict, dict]:
+        """[P11 AFTER] ollama_llm.OllamaLLM.judge와 같은 역할 (JSON 모드)."""
+        system = ("당신은 장애 대응 보고서 검수자다. '수집된 사실'과 '답변'을 비교하라. "
+                  "답변이 수집된 사실에 없는 시스템 상태나 수치를 단정하거나 사실과 반대되는 진단을 하면 "
+                  "grounded=false다. JSON 객체로만 응답하라. 스키마: "
+                  '{"grounded": boolean, "reason": string}')
+        user = f"## 사용자 요청\n{query}\n\n## 수집된 사실\n{facts}\n\n## 답변\n{draft}"
+        content, usage = await self._chat(system, user, json_mode=True)
+        try:
+            raw = json.loads(content)
+            verdict = {"grounded": bool(raw.get("grounded", True)), "reason": str(raw.get("reason", ""))[:200]}
+        except (json.JSONDecodeError, AttributeError):
+            verdict = {"grounded": True, "reason": "judge 출력 파싱 실패 — 규칙 검사 결과만 사용"}
+        return verdict, usage
+
+
 class OpenAIFastLLM(OpenAILLM):
     """분류·계획·단순 대화 전담 (저비용 모델, 기본 gpt-4o-mini)."""
 

@@ -101,6 +101,12 @@ PLAN_SCHEMA = {
     "required": ["needs_analysis", "tasks"],
 }
 
+JUDGE_SCHEMA = {   # [P11 AFTER] judge 출력 형식
+    "type": "object",
+    "properties": {"grounded": {"type": "boolean"}, "reason": {"type": "string"}},
+    "required": ["grounded", "reason"],
+}
+
 
 class OllamaLLM:
     def __init__(self, model: str, usd_per_1k_tokens: float):
@@ -172,6 +178,24 @@ class OllamaLLM:
                                  "usd": round(tokens / 1000 * self.usd_per_1k, 6)}
         usage["prompt"] = f"[SYSTEM]\n{system}\n\n[USER]\n{user}"
         return "".join(chunks), usage
+
+
+    # ── [P11 AFTER] LLM-as-a-Judge: 답변이 '수집된 사실'에 근거하는지 판정 (K9) ──
+    #    Before validate는 30자 + "1)"만 봤다 → 사실과 다른 진단도 23/23건 첫 시도에 합격했다.
+    @traceable(run_type="llm", name="ollama.judge")
+    async def judge(self, query: str, facts: str, draft: str) -> tuple[dict, dict]:
+        system = ("당신은 장애 대응 보고서 검수자다. '수집된 사실'과 '답변'을 비교하라. "
+                  "답변이 수집된 사실에 없는 시스템 상태나 수치를 단정하거나, 사실과 반대되는 진단을 하면 "
+                  "grounded=false다. 사실을 요약·인용하고 일반적인 조치 절차를 덧붙이는 것은 grounded=true다. "
+                  "reason에는 한국어 한 문장으로 근거를 쓴다.")
+        user = f"## 사용자 요청\n{query}\n\n## 수집된 사실\n{facts}\n\n## 답변\n{draft}"
+        content, usage = await self._chat(system, user, schema=JUDGE_SCHEMA)
+        try:
+            raw = json.loads(content)
+            verdict = {"grounded": bool(raw.get("grounded", True)), "reason": str(raw.get("reason", ""))[:200]}
+        except (json.JSONDecodeError, AttributeError):
+            verdict = {"grounded": True, "reason": "judge 출력 파싱 실패 — 규칙 검사 결과만 사용"}
+        return verdict, usage
 
 
 class OllamaFastLLM(OllamaLLM):
