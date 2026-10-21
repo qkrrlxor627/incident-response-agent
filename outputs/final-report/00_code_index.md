@@ -14,10 +14,10 @@
 | P1 | AFTER | `agent/ollama_llm.py:250` | [P1 AFTER] 모르는 이름은 버린다. 질문에 나온 시스템은 아래 '누락 보충'이 다시 채운다 ── |
 | P1 | BEFORE | `agent/ollama_llm.py:264` | [P1 BEFORE] research가 '0개'일 때만 보충 → 모델이 1개만 내면 나머지 시스템은 조사 누락 ── |
 | P1 | AFTER | `agent/ollama_llm.py:274` | [P1 AFTER] 모델이 몇 개를 내든, 질문에 나온 시스템 중 빠진 것을 '항상' 보충한다 ── |
-| P1 | BEFORE | `agent/openai_llm.py:180` | [P1 BEFORE] 목록에 없는 target을 '질문의 첫 시스템'으로 바꿔 버림 → 같은 시스템이 중복돼 제거되고 나머지는 사라짐 ── |
-| P1 | AFTER | `agent/openai_llm.py:184` | [P1 AFTER] 모르는 이름은 버린다. 질문에 나온 시스템은 아래 '누락 보충'이 다시 채운다 ── |
-| P1 | BEFORE | `agent/openai_llm.py:198` | [P1 BEFORE] research가 '0개'일 때만 보충 → 모델이 1개만 내면 나머지 시스템은 조사 누락 ── |
-| P1 | AFTER | `agent/openai_llm.py:208` | [P1 AFTER] 모델이 몇 개를 내든, 질문에 나온 시스템 중 빠진 것을 '항상' 보충한다 ── |
+| P1 | BEFORE | `agent/openai_llm.py:181` | [P1 BEFORE] 목록에 없는 target을 '질문의 첫 시스템'으로 바꿔 버림 → 같은 시스템이 중복돼 제거되고 나머지는 사라짐 ── |
+| P1 | AFTER | `agent/openai_llm.py:185` | [P1 AFTER] 모르는 이름은 버린다. 질문에 나온 시스템은 아래 '누락 보충'이 다시 채운다 ── |
+| P1 | BEFORE | `agent/openai_llm.py:199` | [P1 BEFORE] research가 '0개'일 때만 보충 → 모델이 1개만 내면 나머지 시스템은 조사 누락 ── |
+| P1 | AFTER | `agent/openai_llm.py:209` | [P1 AFTER] 모델이 몇 개를 내든, 질문에 나온 시스템 중 빠진 것을 '항상' 보충한다 ── |
 | P1·#14 | AFTER | `agent/systems.py:1` | """[P1·#14 AFTER] 시스템 이름 추출 공통 모듈. |
 | #14 | BEFORE | `agent/graph.py:29` | [#14 BEFORE] ollama_llm.py·openai_llm.py와 똑같은 복사본 ── |
 | #14 | BEFORE | `agent/ollama_llm.py:36` | [#14 BEFORE] graph.py·ollama_llm.py·openai_llm.py에 똑같이 복사돼 있던 시스템 추출 로직 ── |
@@ -30,8 +30,8 @@
 | P2 | AFTER | `agent/graph.py:350` | [P2 AFTER] 분류 근거가 없으면(None) runbook gap task를 만들지 않고 그대로 진행 ── |
 | P2 | AFTER | `agent/ollama_llm.py:283` | [P2 AFTER] 감시 대상이 아닌 시스템만 나온 질문(q08 billing-service)은 조사하지 않는다 ── |
 | P2 | AFTER | `agent/ollama_llm.py:336` | elif c["source"] == "note":   # [P2 AFTER] runbook을 붙이지 않은 이유 (graph._no_runbook_note) |
-| P2 | AFTER | `agent/openai_llm.py:217` | [P2 AFTER] 감시 대상이 아닌 시스템만 나온 질문(q08 billing-service)은 조사하지 않는다 ── |
-| P2 | AFTER | `agent/openai_llm.py:280` | elif c["source"] == "note":   # [P2 AFTER] runbook을 붙이지 않은 이유 (graph._no_runbook_note) |
+| P2 | AFTER | `agent/openai_llm.py:218` | [P2 AFTER] 감시 대상이 아닌 시스템만 나온 질문(q08 billing-service)은 조사하지 않는다 ── |
+| P2 | AFTER | `agent/openai_llm.py:281` | elif c["source"] == "note":   # [P2 AFTER] runbook을 붙이지 않은 이유 (graph._no_runbook_note) |
 | P3 | BEFORE | `agent/graph.py:176` | [P3 BEFORE] 모델의 needs_analysis 판단만 믿음 → 0.6b 모델은 거의 항상 true (incident 8종 중 7종에서 분석 실행) ── |
 | P3 | AFTER | `agent/graph.py:182` | [P3 AFTER] 이중 게이트 (K7 권위 게이트) ── |
 | P4 | AFTER | `agent/fake_llm.py:35` | [P4 AFTER] 실모델 백엔드와 인터페이스를 맞추려고 route·plan·analyze를 async def로 바꿨다 |
@@ -97,9 +97,9 @@
 | P7 | AFTER | `server.py:253` | [P7 AFTER] SSE 헤더: 프록시(nginx 등)·브라우저가 버퍼링/캐시하지 않고 이벤트를 즉시 흘려보내게 한다 |
 | P7 | BEFORE | `server.py:42` | [P7 BEFORE] 길이·공백 검사가 없음 → 빈 메시지("")도 200 OK로 받아 LLM까지 호출했다 (S7) ── |
 | P7 | AFTER | `server.py:46` | [P7 AFTER] 입력 계약을 모델에 명시한다 (K2 Pydantic 검증) — 위반하면 FastAPI가 422를 돌려준다 ── |
-| P9 | AFTER | `agent/graph.py:506` | """[P9 AFTER] 노드 실행 시간을 재서 state['timings']에 누적하고, JSON 한 줄로 로그를 남긴다. |
-| P9 | BEFORE | `agent/graph.py:525` | [P9 BEFORE] node = lambda fn: partial(fn, deps=deps)   # Wave 13 — 명시적 의존성 주입 |
-| P9 | AFTER | `agent/graph.py:526` | [P9 AFTER] 의존성 주입은 그대로 두고, 바깥에 시간 측정 래퍼(_timed)를 씌운다 |
+| P9 | AFTER | `agent/graph.py:510` | """[P9 AFTER] 노드 실행 시간을 재서 state['timings']에 누적하고, JSON 한 줄로 로그를 남긴다. |
+| P9 | BEFORE | `agent/graph.py:529` | [P9 BEFORE] node = lambda fn: partial(fn, deps=deps)   # Wave 13 — 명시적 의존성 주입 |
+| P9 | AFTER | `agent/graph.py:530` | [P9 AFTER] 의존성 주입은 그대로 두고, 바깥에 시간 측정 래퍼(_timed)를 씌운다 |
 | P9 | AFTER | `agent/graph.py:62` | log = logging.getLogger("agent.graph")   # [P9 AFTER] JSON 한 줄 로그 (server.py가 INFO로 출력) |
 | P9 | AFTER | `agent/graph.py:84` | timings: dict   # [P9 AFTER] 노드별 소요 시간(ms) — 병목 위치를 응답 metadata에서 바로 본다 |
 | P9 | AFTER | `agent/ollama_llm.py:130` | "think": OLLAMA_THINK,            # [P9 AFTER] 숨은 사고 토큰 끔 |
@@ -158,5 +158,7 @@
 | N5 | BEFORE | `agent/graph.py:99` | [N5 BEFORE] incident → chat 한 방향만 보정 → "web-01 상태 괜찮아?"가 chat으로 가서 조회 없이 "괜찮아요"라고 지어냄 |
 | N6 | BEFORE | `agent/ollama_llm.py:279` | [N6 BEFORE] ordered = list(dict.fromkeys(wanted + model_targets)) or [DEFAULT_SYSTEM] |
 | N6 | AFTER | `agent/ollama_llm.py:281` | [N6 AFTER] 질문에 시스템이 나오면 그것만 조사한다. 질문에 없을 때만 모델 선택을 쓴다 |
-| N6 | BEFORE | `agent/openai_llm.py:213` | [N6 BEFORE] ordered = list(dict.fromkeys(wanted + model_targets)) or [DEFAULT_SYSTEM] |
-| N6 | AFTER | `agent/openai_llm.py:215` | [N6 AFTER] 질문에 시스템이 나오면 그것만 조사한다. 질문에 없을 때만 모델 선택을 쓴다 |
+| N6 | BEFORE | `agent/openai_llm.py:214` | [N6 BEFORE] ordered = list(dict.fromkeys(wanted + model_targets)) or [DEFAULT_SYSTEM] |
+| N6 | AFTER | `agent/openai_llm.py:216` | [N6 AFTER] 질문에 시스템이 나오면 그것만 조사한다. 질문에 없을 때만 모델 선택을 쓴다 |
+| N9 | BEFORE | `agent/graph.py:436` | [N9 BEFORE] lines.append(f"- runbook: {d.strip().splitlines()[0] if d.strip() else ''}") |
+| N9 | AFTER | `agent/graph.py:439` | [N9 AFTER] write 단계가 받은 runbook 본문을 judge에게도 그대로 준다 (최대 1500자) |

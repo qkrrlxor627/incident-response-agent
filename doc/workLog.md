@@ -415,6 +415,26 @@ fake 백엔드와 임시 session DB로 `/chat/stream`을 직접 호출해 확인
 - 문서: `outputs/final-report/11_new_issues_N1_N8.md`
 - 측정 이력(무엇이 최신인지)은 README의 "측정 이력" 표에 정리했다.
 
+## 2026-10-21 (밤 2) — OpenAI(과금) 환경 Before/After
+
+- Before는 `git worktree`로 `before-evidence` 코드를 꺼내 OpenAI로 실행했다. After는 현재 코드다. 질의셋과 채점은 Ollama 측정과 같다.
+- 결과 (`outputs/openai/README.md`):
+
+  | 지표 | Before | After |
+  |---|---|---|
+  | runbook 정답률 | 0.75 | 1.0 |
+  | judge | 0.835 | 0.96 |
+  | 응답 중앙값 | 5.3초 | 6.5초 |
+  | 가상 비용 | $0.074 | $0.147 |
+
+  - gpt-4o-mini는 P1이 없었다.
+  - 대신 q04에서 P2 규칙 순서 문제(cpu-spike 오분류)가 드러났다.
+- **N9 발견**: After 1차에서 gpt-4o judge가 runbook에 있는 조치를 4건 오반려했다.
+  - 원인: `_facts_text`가 runbook 제목만 넘겼다.
+  - 수정 후 오반려 0건. pytest 70 passed.
+- 캡처: `outputs/openai/{before,after}/captures/` S1~S4. 캡처 스크립트는 백엔드에 상관없이 동작하는 복사본 `outputs/openai/scripts/ui_capture_any.py`를 썼다.
+- 측정 후 서버는 Ollama(v2)로 되돌렸다.
+
 ## 컴퓨터를 다시 켰을 때 (재시작 절차)
 
 `.venv`, Ollama 모델, `.env`는 디스크에 남아 있다. 그래서 다시 설치할 필요는 없고, **프로세스만 다시 띄우면 된다.**

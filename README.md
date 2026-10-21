@@ -28,7 +28,7 @@
 | 응답 대기 중 다른 요청(`/health`) 지연 | 최대 1.73초 | **0.03초** |
 | **비용** (가상 단가 × 실측 토큰) | $0.1637 | **$0.1360** (−17%) |
 | 응답 성공률 (기존 지표) | 0.97 | 1.0 |
-| 단위 테스트 | 15 passed + 1 xfail | **69 passed** |
+| 단위 테스트 | 15 passed + 1 xfail | **70 passed** |
 
 - 출처: `bench/results/baseline_*`(Before), `after_*`(After, 발표 기준). 최신 코드로 다시 잰 `after_n_*`도 같은 수준이다(아래 '측정 이력'). 비교표 전체와 다시 계산하는 명령은 [`outputs/after/README.md`](outputs/after/README.md)에 있다.
 - 나빠진 점도 같은 문서에 기록했다: q04 judge 0.95 → 0.75, q02는 검증 재작성으로 22.9초.
@@ -57,6 +57,28 @@
 | 가상 비용 | $0.1637 | $0.1360 | $0.1368 |
 | validate 재작성 | 0 | 3 (q02) | 3 (q02) |
 
+### OpenAI(과금) 환경에서도 Before/After (gpt-4o-mini / gpt-4o)
+
+| 순서 | 결과 파일 | 상태 |
+|---|---|---|
+| 6 | `openai_before_*` | OpenAI Before (`before-evidence` 코드) |
+| 7 | `openai_after_run1_*` | 폐기: judge 오반려 발견 → N9 |
+| 8 | `openai_after_*` | **OpenAI 최신 After** |
+
+| 지표 | OpenAI Before | OpenAI After |
+|---|---|---|
+| runbook 정답률 | 0.75 | **1.0** |
+| precision | 0.861 | **1.0** |
+| LLM-judge | 0.835 | **0.96** |
+| 장애 질문 응답 중앙값 | **5.3초** | 6.5초 (+1.2초) |
+| 가상 비용 | **$0.074** | $0.147 (약 2배) |
+
+같은 개선도 모델에 따라 효과가 다르다.
+- 작은 로컬 모델에서는 정확도와 속도가 모두 올랐다.
+- OpenAI에서는 정확도는 올랐지만, gpt-4o judge 호출만큼 느려지고 비용이 늘었다.
+
+자세한 내용은 [`outputs/openai/README.md`](outputs/openai/README.md)에 있다.
+
 ## 무엇을 고쳤나 (고친 순서)
 
 | 단계 | 문제 | 원인 (증거로 확인) | 고친 방법 | 문서 |
@@ -70,6 +92,7 @@
 | 7 | 동기 세션 저장, v1 롤백이 동작하지 않음 | 동기 sqlite, fake 응답 문구에 의존 | `to_thread` 비동기 저장소 + 팩토리, v1도 질문으로 장애 판단 | [09](outputs/final-report/09_step7_E15_P10.md) |
 | 8 | **After 측정이 찾은 회귀** | think를 끈 라우터가 자기소개를 장애로 분류(q10 14초) | route 권위 보정 → 재측정 | [09b](outputs/final-report/09b_step8_route_regression.md) |
 | 9 | **실사용·탐색 스윕이 찾은 문제 N1~N6** | 장애 후 잡담에 보고서를 베낌, "결제 서버"·"WEB-01" 미인식, route 보정 부작용, 상태 질문에 지어낸 답, 질문에 없는 시스템 조사 | 이력 필터, 별칭·대소문자, 양방향 route 보정, 질문 시스템만 조사 | [11](outputs/final-report/11_new_issues_N1_N8.md) |
+| 10 | **OpenAI 측정이 찾은 문제 N9** | judge가 runbook 제목만 봐서 runbook에 있는 조치를 '근거 없음'으로 오반려(gpt-4o, 4건) | runbook 본문을 judge에 전달 | [openai](outputs/openai/README.md) |
 
 각 단계는 **커밋 1개 + 문서 1개**다. 문서는 7단계 문제 해결 형식(정의 → 원인 → 대안 비교 → 실행 → 검증 → 재발 방지)으로 썼고, 끝에 "직접 확인하는 방법"이 있다.
 
@@ -133,7 +156,7 @@ bash sh/run_frontend.sh          # 터미널 3 — 채팅 화면 http://localhos
 ## 테스트와 측정
 
 ```bash
-./.venv/bin/python3 -m pytest tests -q                              # 69 passed
+./.venv/bin/python3 -m pytest tests -q                              # 70 passed
 ./.venv/bin/python3 bench/run_baseline.py --repeat 3 --tag after     # 성능 측정 (서버 필요, 약 6분)
 ./.venv/bin/python3 bench/rescore.py --tag after                     # 정답 세트 재채점 (서버 불필요)
 set -a; source .env; set +a
