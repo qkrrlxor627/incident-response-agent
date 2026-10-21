@@ -165,7 +165,7 @@ LANGCHAIN_TRACING_V2=false LLM_BACKEND=fake SUPERVISOR_VERSION=v2 ./.venv/bin/py
 - `workLog.md`에는 프로젝트 진행만 남긴다.
 - `workClaude.md`도 로컬 전용이다(`.git/info/exclude`). `CLAUDE.md`에 갱신 규칙을 1줄 추가했다.
 
-### 13. 파일별 워크스루 (진행 중 — 2/8단계까지 완료)
+### 13. 파일별 워크스루 (진행 중 — 6/8단계까지 완료, 3~6단계는 10-21)
 
 작업에 들어가기 전에 코드를 파일 단위로 같이 읽으면서, `doc/guide.md`의 문제 기록(#1~#12)이 실제 코드 어디에 있는지 확인하고 있다. 코드는 아직 수정하지 않았다.
 
@@ -174,11 +174,11 @@ LANGCHAIN_TRACING_V2=false LLM_BACKEND=fake SUPERVISOR_VERSION=v2 ./.venv/bin/py
 | 0 | 전체 폴더 구조와 요청 흐름 | — | ✅ |
 | 1 | `server.py` | #3 #10 #12 | ✅ |
 | 2 | `agent/deps.py` + `agent/graph.py` | #2 #3 #8 #9 #12 | ✅ |
-| 3 | `agent/ollama_llm.py` (+ `openai_llm.py`는 다른 점만) | #1 #4 #5 | ⬜ **다음 차례** |
-| 4 | `agent/mcp_client.py` + `agent/retry.py` | #11 | ⬜ |
-| 5 | `fake_llm.py` · `session_store.py` · `supervisor_v1.py` | #6 | ⬜ |
-| 6 | `mcp_server.py` · `mcp_server_docs.py` | — | ⬜ |
-| 7 | `web_demo_server.py` + `web_chat.html` | #3 #10 | ⬜ |
+| 3 | `agent/ollama_llm.py` (+ `openai_llm.py`는 다른 점만) | #1 #4 #5 | ✅ (10-21) |
+| 4 | `agent/mcp_client.py` + `agent/retry.py` | #11 | ✅ (10-21) |
+| 5 | `fake_llm.py` · `session_store.py` · `supervisor_v1.py` | #6 | ✅ (10-21) |
+| 6 | `mcp_server.py` · `mcp_server_docs.py` | — | ✅ (10-21) |
+| 7 | `web_demo_server.py` + `web_chat.html` | #3 #10 | ⬜ **다음 차례** |
 | 8 | `bench/run_baseline.py` + `queries.json` | #7 #12 | ⬜ |
 
 1~2단계에서 확인한 내용:
@@ -236,6 +236,77 @@ LANGCHAIN_TRACING_V2=false LLM_BACKEND=fake SUPERVISOR_VERSION=v2 ./.venv/bin/py
 - 어제 만든 `.claude/` 구성을 "Claude"를 "Codex"로 바꿔 복사한 것뿐이라 새 내용은 없었다. 일부 경로는 깨져 있었다(`.Codex/skills/...`).
 - exclude에 들어 있지 않아서 업로드될 수 있는 상태였으므로 삭제했다. Claude 원본은 바뀐 것이 없다.
 - 삭제 후 `pytest`: 15 passed, 1 xfailed
+
+### 2. 파일별 워크스루 3~4단계 (완료, 코드 수정 없음)
+
+3단계 `agent/ollama_llm.py`:
+- **#1 원인 확인**: `plan()`(171)은 research task가 0개일 때만 `_guess_targets()`로 전체 시스템을 복구한다(205). 모델이 task를 1개만 주면 복구가 일어나지 않는다. 어제 "추정"이던 원인이 코드로 확인됐다.
+  - 추가로 찾은 것: 모델이 시스템명을 틀리면 `_guess_target()`이 첫 시스템 하나만 고르고(193), 나머지는 중복으로 버려진다.
+  - 고칠 방향: 반복문 뒤에 쿼리에 나온 KNOWN_SYSTEMS 중 `seen`에 없는 것을 항상 보충한다. auth-service 기본값은 보충 대상에서 뺀다.
+- **analysis 남발**: `route()`(156)와 `plan()`(178) 프롬프트가 둘 다 모델에게 `needs_analysis`를 정하게 한다. plan은 analysis task 추가도 허용한다. 213줄은 그 값을 그대로 반환한다.
+- **#4 원인 확인**: `_chat()`은 동기 `httpx.post`(104)다. 이걸 `async` 노드에서 바로 부른다(`graph.py:78` route, `:113` plan, `:243` analyze). 그래서 LLM을 기다리는 동안 이벤트 루프 전체가 멈춘다. 답변 스트림용 `_chat_stream()`은 AsyncClient라 문제없다.
+- **#5**: httpx `timeout=300.0`(104, 132)이 q01 실패 시간 300초와 같다. 어느 단계에서 걸렸는지는 기록이 없어 여전히 모른다(#12가 선행).
+- `openai_llm.py`: `plan()` 정규화 로직이 그대로 복사돼 있다(156, 168-174). #1을 고칠 때 두 파일 모두 고치거나 공통 함수로 뺀다.
+
+4단계 `agent/mcp_client.py` + `agent/retry.py`:
+- guide.md #11의 ③ 내용이 코드와 일치한다.
+  - `ClientSession`에 timeout이 없다(60).
+  - 일부러 던지는 가짜 TimeoutError는 74줄 한 곳뿐이다.
+  - `read_resource`에는 재시도가 없다(`graph.py:168`).
+- **#11 "아직 확인하지 못한 것" 해결**: `.venv`의 mcp SDK는 `read_timeout_seconds`를 넘으면 `MCPError(code=REQUEST_TIMEOUT=-32001)`을 낸다(`mcp/shared/jsonrpc_dispatcher.py:442`). `asyncio.TimeoutError`가 아니다.
+  - 그래서 timeout만 추가하면 `with_retry`가 재시도하지 않는다. `with_retry`의 except 조건도 함께 바꿔야 한다.
+- 새로 확인한 것: `MCPClient`는 Lock 하나(`self._lock`)로 모든 서버 호출을 직렬화한다. 그래서 research의 `asyncio.gather`도 MCP 호출 부분은 실제로 하나씩 실행된다. #12에서 시간을 잴 때 함께 본다.
+
+5단계 `fake_llm.py` · `session_store.py` · `supervisor_v1.py`:
+- `fake_llm.py`는 시연용으로 일부러 "틀리게" 만든 모델이다.
+  - `plan()`은 항상 web-01과 analysis task를 끼워 넣는다. gate 시연용이다.
+  - `write()`는 1차 초안을 항상 "재시작하면 됩니다."로 내서 validate 반려를 일으킨다.
+  - 그래서 #1·#2 같은 실모델 버그는 fake 모드에서 재현되지 않는다. 수치 비교는 Ollama bench로만 한다.
+  - 시스템명을 찾는 방식도 다르다. fake는 정규식, Ollama는 KNOWN_SYSTEMS를 쓴다.
+- `session_store.py`
+  - 동기 sqlite3를 async 핸들러에서 호출한다(guide P15, 영향 작음).
+  - `thread_id` 인덱스가 없다.
+  - `load()`는 이력을 전부 읽는다. 단, Ollama `chat()`은 그중 최근 10개만 쓴다(`ollama_llm.py:232`).
+- `supervisor_v1.py`
+  - 조사 대상이 auth-service로 고정돼 있다(P14).
+  - 장애 경로로 들어가는 조건이 chat 답변에 "도와드릴까요"라는 글자가 있는지다. fake의 답변 문구에 맞춘 조건이라 Ollama/OpenAI 모드에서는 v1 장애 진단이 거의 실행되지 않는다(추정, 미측정).
+  - v1은 v2에 문제가 생겼을 때 돌아가는 롤백 경로인데, 실모델에서는 롤백으로 쓰기 어렵다.
+- **guide.md #6 갱신 필요(재확인)**
+  - ①의 "tests/ 없음, pytest 없음"은 지난 상태다.
+  - ③의 "아직 확인하지 못한 것(@traceable)"은 해결됐다. `tests/conftest.py`가 tracing을 끄고, 키 없이 15 passed가 나온다.
+  - 남은 것: research 실패 격리 테스트, 스트림 경로 테스트, v1 경로 테스트.
+
+6단계 `mcp_server.py` · `mcp_server_docs.py` (+ `data/`):
+- **#1의 원인이 하나 더 있을 수 있다(가설)**: 표준 절차 MCP Prompt는 `system_name`을 1개만 받는다(`mcp_server.py:66`).
+  - graph는 여기에 `_extract_system_name()`이 고른 쿼리의 첫 시스템만 넣는다(`graph.py:110`).
+  - 그래서 plan 프롬프트의 "## 표준 절차"에는 "시스템: web-01" 한 줄만 들어간다. 모델이 그 시스템 하나만 계획할 가능성이 있다.
+  - q05("web-01 CPU 급증, auth-service 커넥션 풀도…")가 정확히 이 경로로 web-01만 조사했고 db-down으로 오분류됐다. #1·#2가 같은 뿌리일 수 있다.
+  - 확인 방법: LangSmith의 `ollama_fast.plan` run 입력과 출력.
+- **db-down 폴백 구조**: `data/monitoring.json`에는 DB 시스템도, status=down인 시스템도 없다. 그런데 분류 규칙이 하나도 맞지 않으면 `db-down` runbook을 붙인다(`graph.py:213`).
+  - 그래서 정상(healthy, 알림 없음) 시스템만 조사하면 항상 "DB 다운 대응 절차"가 나온다.
+  - "이상 없음"으로 처리하는 경로가 없다.
+- 없는 시스템을 조회하면 status=`unknown`과 "not found" 알림을 돌려준다. 이 경우도 규칙에 맞지 않아 db-down으로 간다.
+- 모니터링 값에 매번 random jitter(-3~+8)가 섞인다(`mcp_server.py:46`). 반복 측정할 때 CPU 수치가 달라지는 이유다. 분류는 alerts 문구로 하므로 영향이 없다.
+- 쿼리에서 시스템명을 찾는 함수가 3벌이다: `graph._extract_system_name`, `ollama_llm._guess_target`, `openai_llm._guess_target`. 같은 로직이다(guide #6 "헬퍼 중복").
+- `mcp_server_docs.py`는 agent가 쓰지 않는 decoy 서버다. "어느 서버가 resource를 가졌는지 먼저 조회한다"는 시연용이다. 문제 없음.
+
+### 3. 핵심 고장 지점 실증 (코드 수정 없음)
+
+워크스루에서 짚은 고장 지점을 두 가지로 확인했다. 재현 스크립트는 스크래치 폴더에만 두었고 프로젝트에는 넣지 않았다.
+- Before 측정 기록(`bench/results/baseline_raw.jsonl`)
+- 오프라인 재현 스크립트: Ollama 없이 모델 출력을 고정해서 실제 코드를 실행했다.
+
+| # | 고장 지점 | 증거 | 결과 |
+|---|---|---|---|
+| #1 | `plan()`이 쿼리 속 시스템을 보충하지 않음 | baseline q04~q06 9회 전부 | `plan_targets`가 쿼리의 **첫 시스템 1개**뿐이다(gateway / web-01 / payments). 모든 회차가 `PlanCreated task_count=2`(research 1 + analysis 1)라서 복구 조건(`if not seen`)에 걸리지 않았다 |
+| #1 | 같은 원인 | 재현: 모델이 web-01 task 1개만 반환 | 조사 대상 `['web-01']` |
+| #1 | target 오타 처리 | 재현: `web01`, `auth_service` 반환 | 조사 대상 `['web-01']`. 오타 2개가 첫 시스템 1개로 합쳐진다 |
+| #1 | 표준 절차 프롬프트 | 재현: q05의 실제 MCP Prompt | `시스템: web-01` 한 줄만 들어간다. 모델이 이 때문에 하나만 고르는지는 LangSmith로 확인해야 한다(가설 유지) |
+| #2 | db-down 폴백 | baseline q05 3회 + 재현 | healthy web-01 → `db-down`, 없는 시스템(unknown) → `db-down` |
+| 분석 남발 | gate가 모델 값을 그대로 믿음 | baseline q04~q06 9회 | 모든 회차에서 analysis task 생성, `gate_removed=0`, `analysis_ran=true` |
+| #4 | 동기 LLM 호출 | 재현: 모델 응답 2초 가정 | `route_node`가 도는 2초 동안 다른 작업 tick이 **1회**(정상이면 약 20회). 이벤트 루프가 멈춘다 |
+| #11 | MCP timeout 예외 타입 | 재현: 5초 걸리는 tool + timeout 1초 | `mcp.shared.exceptions.MCPError: Request 'tools/call' timed out`. `asyncio.TimeoutError`가 아니어서 `with_retry`는 **1회만 시도**하고 바로 실패한다 |
+| v1 | 롤백 경로 | 재현: chat 답변에 "도와드릴까요"가 없을 때 | 모니터링 조회를 하지 않고 chat 답변을 그대로 반환한다. 실모델 롤백 경로로 쓸 수 없다 |
 
 ---
 
@@ -307,7 +378,7 @@ lsof -ti:8100,8600 | xargs kill -9 2>/dev/null
 cd ~/subject/1020/all_total_vue_student
 claude --continue                  # 마지막 대화를 그대로 이어서 연다
 ```
-- 이어서 연 뒤 "workLog 13번 워크스루 3단계부터 이어서 하자"라고 말하면 된다.
+- 이어서 연 뒤 "workLog 13번 워크스루 7단계부터 이어서 하자"라고 말하면 된다.
 - 대화를 새로 시작해도 이 파일 13번 표와 `doc/guide.md`(#1~#12)를 보면 어디까지 했는지 알 수 있다.
 
 ---
